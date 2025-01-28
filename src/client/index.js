@@ -6,6 +6,7 @@ import { css } from '@firebolt-dev/css'
 import { createClientWorld } from '../core/createClientWorld'
 import { loadPhysX } from './loadPhysX'
 import { GUI } from './components/GUI'
+import { WalletProvider } from './components/WalletProvider'
 
 function App() {
   const viewportRef = useRef()
@@ -52,7 +53,9 @@ function App() {
     >
       <div className='App__viewport' ref={viewportRef} />
       <div className='App__ui' ref={uiRef}>
-        <GUI world={world} />
+        <WalletProvider>
+          <GUI world={world} />
+        </WalletProvider>
       </div>
     </div>
   )

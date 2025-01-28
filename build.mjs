@@ -23,7 +23,7 @@ const clientHtmlDest = path.join(rootDir, 'build/public/index.html')
 
 {
   const clientCtx = await esbuild.context({
-    entryPoints: ['src/client/index.js'],
+    entryPoints: ['src/client/index.js', 'src/client/components/WalletProvider.js'],
     entryNames: '/[name]-[hash]',
     outdir: clientBuildDir,
     platform: 'browser',
