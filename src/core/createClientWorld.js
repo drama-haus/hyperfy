@@ -4,6 +4,7 @@ import { Client } from './systems/Client'
 import { ClientControls } from './systems/ClientControls'
 import { ClientNetwork } from './systems/ClientNetwork'
 import { ClientLoader } from './systems/ClientLoader'
+import { Solana } from './systems/Solana'
 import { ClientGraphics } from './systems/ClientGraphics'
 import { ClientEnvironment } from './systems/ClientEnvironment'
 import { ClientAudio } from './systems/ClientAudio'
@@ -14,6 +15,7 @@ import { LODs } from './systems/LODs'
 import { Nametags } from './systems/Nametags'
 import { Snaps } from './systems/Snaps'
 import { XR } from './systems/XR'
+import { EVM } from './systems/EVM'
 
 export function createClientWorld() {
   const world = new World()
@@ -31,5 +33,7 @@ export function createClientWorld() {
   world.register('nametags', Nametags)
   world.register('snaps', Snaps)
   world.register('xr', XR)
+  world.register('solana', Solana)
+  world.register('evm', EVM)
   return world
 }

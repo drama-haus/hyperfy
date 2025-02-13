@@ -23,6 +23,11 @@ import { buttons, propToLabel } from '../../core/extras/buttons'
 import { cls } from '../utils'
 import { uuid } from '../../core/utils'
 import { ControlPriorities } from '../../core/extras/ControlPriorities'
+import { WalletMultiButton } from '@solana/wallet-adapter-react-ui'
+import { useConnection, useWallet } from '@solana/wallet-adapter-react'
+import { useWallet as useSolanaWallet } from '@solana/wallet-adapter-react'
+import { useSplTransfer } from './useSendToken'
+import { useConnect, useConnectors } from 'wagmi'
 
 export function GUI({ world }) {
   const [ref, width, height] = useElemSize()
@@ -39,7 +44,38 @@ export function GUI({ world }) {
   )
 }
 
+function WalletModalButton() {
+  return (
+    <div
+      css={css`
+        position: absolute;
+        top: 20px;
+        right: 20px;
+      `}
+    >
+      <WalletMultiButton
+        style={{
+          background: 'linear-gradient(180deg, rgba(40, 40, 45, 0.9) 0%, rgba(25, 25, 30, 0.9) 100%)',
+          border: '1px solid rgba(255, 255, 255, 0.1)',
+          boxShadow: '0 4px 12px rgba(0, 0, 0, 0.3), inset 0 1px 1px rgba(255, 255, 255, 0.1)',
+          backdropFilter: 'blur(10px)',
+          color: 'white',
+          borderRadius: '12px',
+          padding: '10px 20px',
+          transition: 'all 0.2s ease',
+          '&:hover': {
+            background: 'linear-gradient(180deg, rgba(50, 50, 55, 0.9) 0%, rgba(35, 35, 40, 0.9) 100%)',
+            boxShadow: '0 4px 16px rgba(0, 0, 0, 0.4), inset 0 1px 1px rgba(255, 255, 255, 0.1)',
+          },
+        }}
+      />
+    </div>
+  )
+}
+
 function Content({ world, width, height }) {
+  const { connection } = useConnection()
+  const wallet = useWallet()
   const small = width < 600
   const [ready, setReady] = useState(false)
   const [inspect, setInspect] = useState(null)
@@ -60,6 +96,37 @@ function Content({ world, width, height }) {
       world.off('disconnect', setDisconnected)
     }
   }, [])
+
+  const { transfer } = useSplTransfer()
+  const handleTransfer = async (tokenMint, recipientAddress, amount = 1000000000) => {
+    // todo: discover decimals on the fly
+    const result = await transfer({
+      tokenMint,
+      recipientAddress,
+      amount,
+      decimals: 9,
+      onSuccess: ({ signature, amount }) => {
+        console.log(`Successfully sent ${amount} tokens!`)
+        console.log('Transaction signature:', signature)
+        console.log(result)
+      },
+      onError: error => {
+        console.error('Transfer failed:', error)
+      },
+    })
+  }
+
+  useEffect(() => {
+    if (!wallet || !connection) return
+    if (!world.solana.initialized) {
+      world.solana.wallet = wallet
+      world.solana.connection = connection
+      world.solana.token = {
+      transfer: handleTransfer 
+      }
+    }
+  }, [wallet, connection])
+
   return (
     <div
       className='gui'
@@ -85,6 +152,30 @@ function Side({ world }) {
   const inputRef = useRef()
   const [msg, setMsg] = useState('')
   const [chat, setChat] = useState(false)
+  const wallet = useSolanaWallet()
+
+  const { transfer } = useSplTransfer()
+
+  //default amount = 1 token (assuming 9 decimals)) => {
+  const handleTransfer = async (tokenMint, recipientAddress, amount = 1000000000) => {
+    // todo: discover decimals on the fly
+    const result = await transfer({
+      tokenMint,
+      recipientAddress,
+      amount,
+      decimals: 9,
+      onSuccess: ({ signature, amount }) => {
+        console.log(`Successfully sent ${amount} tokens!`)
+        console.log('Transaction signature:', signature)
+        console.log(result)
+      },
+      onError: error => {
+        console.error('Transfer failed:', error)
+      },
+    })
+  }
+  const { connect } = useConnect()
+  const connectors = useConnectors()
   useEffect(() => {
     const control = world.controls.bind({ priority: ControlPriorities.GUI })
     control.enter.onPress = () => {
@@ -112,10 +203,32 @@ function Side({ world }) {
     setMsg('')
     // check for client commands
     if (msg.startsWith('/')) {
-      const [cmd, arg1, arg2] = msg.slice(1).split(' ')
+      const [cmd, ...args] = msg.slice(1).split(' ')
+      console.log(cmd, args)
       if (cmd === 'stats') {
         world.stats.toggle()
         return
+      } else if (cmd === 'connect') {
+        const [chain] = args
+        if (chain.startsWith('sol')) {
+          // connect()
+          const wallet_name = wallet.wallets?.[0].adapter.name
+          console.log(wallet)
+          console.log(wallet_name)
+          wallet.select(wallet_name)
+          // await wallet.connect()
+          console.log(wallet)
+        } else if (chain == 'evm') {
+          console.log('connect default evm chain')
+          connect({ connector: connectors?.[0] })
+        } // else if(chain in ['eth', 'base'])
+      } //else if (cmd === 'switch_chain')
+      else if (cmd === 'send') {
+        const [token, recipient, amount] = args
+        console.log([token, recipient, amount])
+        handleTransfer(token, recipient, amount)
+      } else if (cmd === 'disconnect') {
+        wallet?.disconnect()
       }
     }
     // otherwise post it

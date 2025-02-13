@@ -6,6 +6,21 @@ import { css } from '@firebolt-dev/css'
 import { createClientWorld } from '../core/createClientWorld'
 import { loadPhysX } from './loadPhysX'
 import { GUI } from './components/GUI'
+import { WalletProvider } from './components/WalletProvider'
+
+// required for spl token program
+import * as buf from 'buffer'
+
+const Buffer = buf.default.Buffer
+
+// client support
+if (typeof window !== 'undefined') {
+  globalThis.Buffer = Buffer
+}
+import { Providers } from './components/Providers'
+import * as evmActions from 'wagmi/actions'
+import { useConfig } from 'wagmi'
+import * as utils from 'viem/utils'
 
 function App() {
   const viewportRef = useRef()
@@ -28,6 +43,21 @@ function App() {
     ui.addEventListener('pointermove', onEvent)
     ui.addEventListener('pointerup', onEvent)
   }, [])
+
+  const config = useConfig()
+  const [initialized, setInitialized] = useState(false)
+  useEffect(() => {
+    if (initialized) return
+    setInitialized(true)
+
+    let evm = { actions: {}, utils }
+    for (const [action, fn] of Object.entries(evmActions)) {
+      evm.actions[action] = (...args) => fn(config, ...args)
+    }
+
+    world.evm = evm
+  }, [config])
+
   return (
     <div
       className='App'
@@ -52,11 +82,17 @@ function App() {
     >
       <div className='App__viewport' ref={viewportRef} />
       <div className='App__ui' ref={uiRef}>
-        <GUI world={world} />
+        <WalletProvider>
+          <GUI world={world} />
+        </WalletProvider>
       </div>
     </div>
   )
 }
 
 const root = createRoot(document.getElementById('root'))
-root.render(<App />)
+root.render(
+  <Providers>
+    <App />
+  </Providers>
+)

@@ -5,6 +5,9 @@ import moment from 'moment'
 import { uuid } from '../../core/utils'
 import { cls } from '../utils'
 import { ControlPriorities } from '../../core/extras/ControlPriorities'
+import { useWallet as useSolanaWallet } from '@solana/wallet-adapter-react'
+import { useSplTransfer } from './useSendToken'
+
 
 const CHAT_TIME_REFRESH_RATE = 30 // every x seconds
 
@@ -15,6 +18,30 @@ export function ChatBox({ className, world, active, onClose, ...props }) {
   const [body, setBody] = useState('')
   const [now, setNow] = useState(() => moment())
   const [msgs, setMsgs] = useState([])
+
+  const wallet = useSolanaWallet()
+
+  const { transfer, isLoading, error, signature, resetState } = useSplTransfer()
+
+  //default amount = 1 token (assuming 9 decimals)) => {
+  const handleTransfer = async (tokenMint, recipientAddress, amount = 1000000000) => {
+    // todo: discover decimals on the fly
+    const result = await transfer({
+      tokenMint,
+      recipientAddress,
+      amount,
+      decimals: 9,
+      onSuccess: ({ signature, amount }) => {
+        console.log(`Successfully sent ${amount} tokens!`)
+        console.log('Transaction signature:', signature)
+        console.log(result)
+      },
+      onError: error => {
+        console.error('Transfer failed:', error)
+      },
+    })
+  }
+
   useEffect(() => {
     const control = world.controls.bind({ priority: ControlPriorities.GUI })
     control.enter.onPress = () => {
@@ -50,10 +77,28 @@ export function ChatBox({ className, world, active, onClose, ...props }) {
     setBody('')
     // check for client commands
     if (body.startsWith('/')) {
-      const [cmd, arg1, arg2] = body.slice(1).split(' ')
+      const [cmd, ...args] = body.slice(1).split(' ')
       if (cmd === 'stats') {
         world.stats.toggle()
         return
+      } else if (cmd === 'connect') {
+        if (args[0]?.startsWith('sol')) {
+          // connect()
+          const wallet_name = wallet.wallets?.[0].adapter.name
+          console.log(wallet)
+          console.log(wallet_name)
+          wallet.select(wallet_name)
+          // await wallet.connect()
+          console.log(wallet)
+
+
+        }
+      } else if (cmd === 'send') {
+        const [token, recipient, amount] = args
+        console.log([token, recipient, amount])
+        handleTransfer(token, recipient, amount)
+      } else if (cmd === 'disconnect') {
+        wallet?.disconnect()
       }
     }
     // otherwise post it
