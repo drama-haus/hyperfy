@@ -25,7 +25,8 @@
     "lint:fix": "eslint . --ext .js,.jsx --fix",
     "format": "prettier --write .",
     "check": "npm run lint && npm run format",
-    "world:clean": "node world-clean.mjs"
+    "world:clean": "node world-clean.mjs",
+    "hucow": "hucow"
   },
   "dependencies": {
     "@fastify/compress": "^8.0.1",
