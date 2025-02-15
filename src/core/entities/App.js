@@ -413,6 +413,22 @@ export class App extends Entity {
         const player = world.entities.getPlayer(playerId || world.entities.player?.data.id)
         return player?.getProxy()
       },
+      // Shiftty: There are issues... mainly that only collisions with the ground are working atm but I just didn't have time to investigate.
+      raycast(origin, direction, maxDistance = Infinity, layerMask = 0xffffffff) {
+        if (!origin?.isVector3 || !direction?.isVector3) {
+          console.error('raycast: origin and direction must be Vector3')
+          return null
+        }
+
+        const hit = world.physics.raycast(origin, direction, maxDistance, layerMask)
+        if (!hit) return null
+
+        return {
+          point: hit.point.clone(),
+          normal: hit.normal.clone(),
+          distance: hit.distance,
+        }
+      },
     }
   }
 
