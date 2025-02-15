@@ -7,6 +7,8 @@ import { createClientWorld } from '../core/createClientWorld'
 import { loadPhysX } from './loadPhysX'
 import { GUI } from './components/GUI'
 
+console.log('hello world')
+
 function App() {
   const viewportRef = useRef()
   const uiRef = useRef()

@@ -496,6 +496,15 @@ export class App extends Entity {
         // deprecated. will be removed
         return entity.blueprint.props
       },
+      sendTo(nid, name, data) {
+        if (world.network.isClient) return // client cant send events to other clients, unless...?
+        const event = [entity.data.id, entity.blueprint.version, name, data]
+        world.network.sendTo(nid, 'entityEvent', event)
+      },
+      registerCommand(cmd, fn, isAdmin) {
+        if(world.network.isClient) return;
+        world.chat.commands.set(cmd, { fn, isAdmin })
+      },
     }
     proxy = Object.defineProperties(proxy, Object.getOwnPropertyDescriptors(this.root.getProxy())) // inherit root Node properties
     return proxy
