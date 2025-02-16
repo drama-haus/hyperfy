@@ -93,6 +93,9 @@ export class PlayerLocal extends Entity {
     this.base.position.fromArray(this.data.position)
     this.base.quaternion.fromArray(this.data.quaternion)
 
+    this.emotes = emotes
+    this.emoting = false
+
     // this.nametag = createNode({ name: 'nametag', label: this.data.user.name, active: false })
     // this.base.add(this.nametag)
 
@@ -141,6 +144,11 @@ export class PlayerLocal extends Entity {
     this.initControl()
 
     this.world.setHot(this, true)
+  }
+
+  replaceAnimations(newEmotes) {
+    console.log(this.emotes, newEmotes)
+    this.emotes = { ...emotes, ...newEmotes }
   }
 
   applyAvatar() {
@@ -704,6 +712,7 @@ export class PlayerLocal extends Entity {
     }
 
     // emote
+    this.emoteProps = {loop: true}
     if (this.flying) {
       this.emote = Emotes.FLOAT
     } else if (this.airJumping) {
@@ -717,7 +726,12 @@ export class PlayerLocal extends Entity {
     } else {
       this.emote = Emotes.IDLE
     }
-    this.avatar?.setEmote(emotes[this.emote])
+
+    if (this.emoting) {
+      if (this.moving) this.emoting = false
+    } else {
+      this.avatar?.setEmote(this.emotes[this.emote], this.emoteProps)
+    }
 
     // send network updates
     this.lastSendAt += delta

@@ -39,8 +39,8 @@ export class Avatar extends Node {
     return this.instance?.height || null
   }
 
-  setEmote(url) {
-    return this.instance?.setEmote(url)
+  setEmote(url, { loop = true }) {
+    return this.instance?.setEmote(url, { loop })
   }
 
   copy(source, recursive) {
@@ -57,8 +57,8 @@ export class Avatar extends Node {
         get height() {
           return self.height
         },
-        setEmote(url) {
-          return self.setEmote(url)
+        setEmote(url, { loop = true }) {
+          return self.setEmote(url, { loop })
         },
       }
       proxy = Object.defineProperties(proxy, Object.getOwnPropertyDescriptors(super.getProxy())) // inherit Node properties
