@@ -79,10 +79,16 @@ export class PlayerRemote extends Entity {
     this.position = new LerpVector3(this.base.position, this.world.networkRate)
     this.quaternion = new LerpQuaternion(this.base.quaternion, this.world.networkRate)
     this.emote = 'asset://emote-idle.glb'
+    this.emotes = emotes
+    this.emoting = false;
     this.teleport = 0
 
     this.world.setHot(this, true)
     this.world.events.emit('enter', { player: this.getProxy() })
+  }
+
+  replaceAnimations(newEmotes) {
+    this.emotes = { ...emotes, ...newEmotes }
   }
 
   applyAvatar() {
@@ -104,7 +110,8 @@ export class PlayerRemote extends Entity {
   update(delta) {
     this.position.update(delta)
     this.quaternion.update(delta)
-    this.avatar?.setEmote(emotes[this.emote])
+    if(this.emoting) return;
+    this.avatar?.setEmote(this.emotes[this.emote], {})
   }
 
   modify(data) {

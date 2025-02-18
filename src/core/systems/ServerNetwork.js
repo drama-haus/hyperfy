@@ -385,6 +385,15 @@ export class ServerNetwork extends System {
     this.sendTo(data.networkId, 'playerTeleport', data)
   }
 
+  onPlayerReplaceAnimations = (socket, data) => {
+    // TODO: check client permission
+    this.send('playerReplaceAnimations', {pid: socket.player.data.id, data}, socket.id)
+  }
+
+  onPlayerEmote = (socket, data) => {
+    this.send('playerEmote', {pid: socket.player.data.id, emote: data})
+  }
+
   onDisconnect = (socket, code) => {
     socket.player.destroy(true)
     this.sockets.delete(socket.id)

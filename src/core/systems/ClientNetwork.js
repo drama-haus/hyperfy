@@ -130,6 +130,21 @@ export class ClientNetwork extends System {
     this.world.entities.player?.teleport(data)
   }
 
+  onPlayerReplaceAnimations = ({ pid, data }) => {
+    this.world.entities.players.get(pid)?.replaceAnimations(data)
+  }
+
+  onPlayerEmote = ({ pid, emote }) => {
+    const other = this.world.entities.players.get(pid)
+    if (!other) return
+    other.emoting = true
+    other.avatar.setEmote(emote, {
+      onFinish: () => {
+        other.emoting = false
+      },
+    })
+  }
+
   onClose = code => {
     this.world.emit('disconnect', code || true)
     console.log('disconnect', code)

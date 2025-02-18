@@ -194,8 +194,17 @@ export function createVRMFactory(glb, setupMaterial) {
       //   action: AnimationAction
       // }
     }
+
+    const onAnimationinish = () => {
+      console.log('finish!')
+      // mixer.removeEventListener('finished', onFinish, false)
+      currentEmote.onFinish?.()
+    }
+
+    mixer.addEventListener('finished', onAnimationinish, false)
+
     let currentEmote
-    const setEmote = url => {
+    const setEmote = (url, { loop = true, onFinish }) => {
       if (currentEmote?.url === url) return
       if (currentEmote) {
         currentEmote.action?.fadeOut(0.15)
@@ -209,6 +218,7 @@ export function createVRMFactory(glb, setupMaterial) {
           url,
           loading: true,
           action: null,
+          onFinish,
         }
         emotes[url] = emote
         currentEmote = emote
@@ -219,8 +229,13 @@ export function createVRMFactory(glb, setupMaterial) {
             getBoneName,
           })
           const action = mixer.clipAction(clip)
+          if (!loop) {
+            // hmm
+            action.setLoop(THREE.LoopOnce)
+            action.clampWhenFinished = true
+          }
+
           emote.action = action
-          // if its still this emote, play it!
           if (currentEmote === emote) {
             action.play()
           }
