@@ -36,5 +36,20 @@ export function createPlayerProxy(player) {
         world.network.sendTo(player.data.owner, 'playerTeleport', { position: position.toArray(), rotationY })
       }
     },
+    setEmote(emoteUrl, {loop = false, onFinish}) {
+      if (player.emoting === undefined) return
+      // console.log(emoteUrl, loop)
+      player.emoting = true
+      player.avatar.setEmote(emoteUrl, { loop, onFinish})
+
+      // console.log(player)
+    },
+    replaceAnimations(newEmotes) {
+      player.replaceAnimations(newEmotes)
+    },
+    getMoving() {
+      const { flying, jumping, falling, moving } = player
+      return { flying, jumping, falling, moving }
+    },
   }
 }
