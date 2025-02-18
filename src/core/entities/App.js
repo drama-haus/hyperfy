@@ -1,4 +1,4 @@
-import { isArray, isFunction, isString } from 'lodash-es'
+import { isArray, isFunction, isString, wrap } from 'lodash-es'
 import moment from 'moment'
 
 import { Entity } from './Entity'
@@ -430,6 +430,10 @@ export class App extends Entity {
       },
       get state() {
         return entity.data.state
+      },
+      get solana() {
+        const { world: _world, ...solana } = world.solana // do not expose entire world to script
+        return solana
       },
       set state(value) {
         entity.data.state = value
