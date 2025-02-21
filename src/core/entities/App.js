@@ -458,6 +458,9 @@ export class App extends Entity {
         this.raycastHit.player = hit.handle?.player
         return this.raycastHit
       },
+      getEvm() {
+        return world.evm
+      },
     }
   }
 
