@@ -458,6 +458,10 @@ export class App extends Entity {
         this.raycastHit.player = hit.handle?.player
         return this.raycastHit
       },
+      getEvm() {
+        const { world: _, ...evm } = world.evm
+        return evm
+      },
     }
   }
 

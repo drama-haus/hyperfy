@@ -152,6 +152,10 @@ export class PlayerRemote extends Entity {
       this.data.sessionAvatar = data.sessionAvatar
       avatarChanged = true
     }
+    if (data.hasOwnProperty('evm')) {
+      this.data.evm = data.evm
+      this.world.events.emit('evm', { player: this.getProxy() })
+    }
     if (data.hasOwnProperty('roles')) {
       this.data.roles = data.roles
     }
