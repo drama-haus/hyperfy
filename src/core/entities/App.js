@@ -474,6 +474,10 @@ export class App extends Entity {
       get state() {
         return entity.data.state
       },
+      get solana() {
+        const { world: _world, ...solana } = world.solana // do not expose entire world to script
+        return solana
+      },
       set state(value) {
         entity.data.state = value
       },

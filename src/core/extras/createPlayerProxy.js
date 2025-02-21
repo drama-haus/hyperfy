@@ -28,6 +28,9 @@ export function createPlayerProxy(player) {
     get quaternion() {
       return quaternion.copy(player.base.quaternion)
     },
+    get solana() {
+      return player.data.solana
+    },
     teleport(position, rotationY) {
       if (player.data.owner === world.network.id) {
         // if player is local we can set directly

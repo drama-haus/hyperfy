@@ -28,6 +28,9 @@ import { hasRole, uuid } from '../../core/utils'
 import { ControlPriorities } from '../../core/extras/ControlPriorities'
 import { AppsPane } from './AppsPane'
 import { SettingsPane } from './SettingsPane'
+import { WalletMultiButton } from '@solana/wallet-adapter-react-ui'
+import { useConnection, useWallet } from '@solana/wallet-adapter-react'
+import { useSplToken } from './useSplToken'
 
 export function GUI({ world }) {
   const [ref, width, height] = useElemSize()
@@ -40,6 +43,60 @@ export function GUI({ world }) {
       `}
     >
       {width > 0 && <Content world={world} width={width} height={height} />}
+    </div>
+  )
+}
+
+function WalletModalButton({ world }) {
+  const { connection } = useConnection()
+  const wallet = useWallet()
+
+  const { transfer, balance } = useSplToken()
+  useEffect(() => {
+    if (!wallet || !connection) return
+
+    if (!world.solana.initialized) {
+      world.solana.wallet = wallet
+      world.solana.connection = connection
+      world.solana.programs = {
+        token: { transfer, balance },
+      }
+    }
+  }, [wallet, connection])
+
+  useEffect(() => {
+    if (!world.entities?.player) return
+
+    // This will be undefined when disconnected or the key string when connected
+    const walletAddress = wallet.publicKey?.toString()
+
+    world.entities.player.modify({ solana: walletAddress })
+  }, [wallet.publicKey, world.entities?.player])
+
+  return (
+    <div
+      css={css`
+        position: absolute;
+        top: 20px;
+        right: 20px;
+      `}
+    >
+      <WalletMultiButton
+        style={{
+          background: 'linear-gradient(180deg, rgba(40, 40, 45, 0.9) 0%, rgba(25, 25, 30, 0.9) 100%)',
+          border: '1px solid rgba(255, 255, 255, 0.1)',
+          boxShadow: '0 4px 12px rgba(0, 0, 0, 0.3), inset 0 1px 1px rgba(255, 255, 255, 0.1)',
+          backdropFilter: 'blur(10px)',
+          color: 'white',
+          borderRadius: '12px',
+          padding: '10px 20px',
+          transition: 'all 0.2s ease',
+          '&:hover': {
+            background: 'linear-gradient(180deg, rgba(50, 50, 55, 0.9) 0%, rgba(35, 35, 40, 0.9) 100%)',
+            boxShadow: '0 4px 16px rgba(0, 0, 0, 0.4), inset 0 1px 1px rgba(255, 255, 255, 0.1)',
+          },
+        }}
+      />
     </div>
   )
 }
@@ -70,32 +127,36 @@ function Content({ world, width, height }) {
       world.off('disconnect', setDisconnected)
     }
   }, [])
+
   return (
-    <div
-      className='gui'
-      css={css`
-        position: absolute;
-        inset: 0;
-      `}
-    >
-      {inspect && <InspectPane key={`inspect-${inspect.data.id}`} world={world} entity={inspect} />}
-      {inspect && code && <CodePane key={`code-${inspect.data.id}`} world={world} entity={inspect} />}
-      {avatar && <AvatarPane key={avatar.hash} world={world} info={avatar} />}
-      {disconnected && <Disconnected />}
-      <Reticle world={world} />
-      {<Toast world={world} />}
-      {ready && (
-        <Side
-          world={world}
-          player={player}
-          toggleSettings={() => setSettings(!settings)}
-          toggleApps={() => setApps(!apps)}
-        />
-      )}
-      {settings && <SettingsPane world={world} player={player} close={() => setSettings(false)} />}
-      {apps && <AppsPane world={world} close={() => setApps(false)} />}
-      {!ready && <LoadingOverlay />}
-    </div>
+    <>
+      <WalletModalButton world={world} />
+      <div
+        className='gui'
+        css={css`
+          position: absolute;
+          inset: 0;
+        `}
+      >
+        {inspect && <InspectPane key={`inspect-${inspect.data.id}`} world={world} entity={inspect} />}
+        {inspect && code && <CodePane key={`code-${inspect.data.id}`} world={world} entity={inspect} />}
+        {avatar && <AvatarPane key={avatar.hash} world={world} info={avatar} />}
+        {disconnected && <Disconnected />}
+        <Reticle world={world} />
+        {<Toast world={world} />}
+        {ready && (
+          <Side
+            world={world}
+            player={player}
+            toggleSettings={() => setSettings(!settings)}
+            toggleApps={() => setApps(!apps)}
+          />
+        )}
+        {settings && <SettingsPane world={world} player={player} close={() => setSettings(false)} />}
+        {apps && <AppsPane world={world} close={() => setApps(false)} />}
+        {!ready && <LoadingOverlay />}
+      </div>
+    </>
   )
 }
 
