@@ -28,6 +28,7 @@ import { hasRole, uuid } from '../../core/utils'
 import { ControlPriorities } from '../../core/extras/ControlPriorities'
 import { AppsPane } from './AppsPane'
 import { SettingsPane } from './SettingsPane'
+import { useConnect, useConnectors } from 'wagmi'
 
 export function GUI({ world }) {
   const [ref, width, height] = useElemSize()
@@ -107,6 +108,8 @@ function Side({ world, player, toggleSettings, toggleApps }) {
   const canBuild = useMemo(() => {
     return player && hasRole(player.data.roles, 'admin', 'builder')
   }, [player])
+  const { connect } = useConnect()
+  const connectors = useConnectors()
   useEffect(() => {
     const control = world.controls.bind({ priority: ControlPriorities.GUI })
     control.enter.onPress = () => {
@@ -137,10 +140,16 @@ function Side({ world, player, toggleSettings, toggleApps }) {
     setMsg('')
     // check for client commands
     if (msg.startsWith('/')) {
-      const [cmd, arg1, arg2] = msg.slice(1).split(' ')
+      const [cmd, ...args] = msg.slice(1).split(' ')
       if (cmd === 'stats') {
         world.stats.toggle()
         return
+      } else if (cmd === 'connect') {
+        const [chain] = args
+        if (chain == 'evm') {
+          console.log('connect default evm chain')
+          connect({ connector: connectors?.[0] })
+        }
       }
     }
     // otherwise post it
