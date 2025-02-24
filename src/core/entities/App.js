@@ -490,6 +490,10 @@ export class App extends Entity {
       //     world.network.send('playerEffect', effect)
       //   }
       // },
+      getEvm() {
+        const { world: _, ...evm } = world.evm
+        return evm
+      },
     }
   }
 
