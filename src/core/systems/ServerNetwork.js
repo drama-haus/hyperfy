@@ -248,84 +248,86 @@ export class ServerNetwork extends System {
     // TODO: check for spoofed messages, permissions/roles etc
     // handle slash commands
     if (msg.body.startsWith('/')) {
-      const [cmd, arg1, arg2] = msg.body.slice(1).split(' ')
-      // become admin command
-      if (cmd === 'admin') {
-        const code = arg1
-        if (code !== process.env.ADMIN_CODE || !process.env.ADMIN_CODE) return
-        const player = socket.player
-        const id = player.data.id
-        const userId = player.data.userId
-        const roles = player.data.roles
-        const granting = !hasRole(roles, 'admin')
-        if (granting) {
-          addRole(roles, 'admin')
-        } else {
-          removeRole(roles, 'admin')
+      const [cmd, ...args] = msg.body.slice(1).split(' ')
+      const player = socket.player
+      const id = player.data.id
+      const user = player.data.user
+      switch (cmd) {
+        case 'admin': {
+          const code = args[0]
+          if (code !== process.env.ADMIN_CODE || !process.env.ADMIN_CODE) return
+          const userId = player.data.userId
+          const roles = player.data.roles
+          const granting = !hasRole(roles, 'admin')
+          if (granting) {
+            addRole(roles, 'admin')
+          } else {
+            removeRole(roles, 'admin')
+          }
+          player.modify({ roles })
+          this.send('entityModified', { id, roles })
+          socket.send('chatAdded', {
+            id: uuid(),
+            from: null,
+            fromId: null,
+            body: granting ? 'Admin granted!' : 'Admin revoked!',
+            createdAt: moment().toISOString(),
+          })
+          await this.db('users')
+            .where('id', userId)
+            .update({ roles: serializeRoles(roles) })
         }
-        player.modify({ roles })
-        this.send('entityModified', { id, roles })
-        socket.send('chatAdded', {
-          id: uuid(),
-          from: null,
-          fromId: null,
-          body: granting ? 'Admin granted!' : 'Admin revoked!',
-          createdAt: moment().toISOString(),
-        })
-        await this.db('users')
-          .where('id', userId)
-          .update({ roles: serializeRoles(roles) })
-      }
-      if (cmd === 'name') {
-        const name = arg1
-        if (!name) return
-        const player = socket.player
-        const id = player.data.id
-        const userId = player.data.userId
-        player.data.name = name
-        player.modify({ name })
-        this.send('entityModified', { id, name })
-        socket.send('chatAdded', {
-          id: uuid(),
-          from: null,
-          fromId: null,
-          body: `Name set to ${name}!`,
-          createdAt: moment().toISOString(),
-        })
-        await this.db('users').where('id', userId).update({ name })
-      }
-      if (cmd === 'spawn') {
-        const player = socket.player
-        const roles = player.data.roles
-        if (!hasRole(roles, 'admin')) return
-        const action = arg1
-        if (action === 'set') {
-          this.spawn = { position: player.data.position.slice(), quaternion: player.data.quaternion.slice() }
-        } else if (action === 'clear') {
-          this.spawn = { position: [0, 0, 0], quaternion: [0, 0, 0, 1] }
-        } else {
+
+        case 'name': {
+          const name = args[0]
+          if (!name) return
+          const userId = player.data.userId
+          player.data.name = name
+          player.modify({ name })
+          this.send('entityModified', { id, name })
+          socket.send('chatAdded', {
+            id: uuid(),
+            from: null,
+            fromId: null,
+            body: `Name set to ${name}!`,
+            createdAt: moment().toISOString(),
+          })
+          await this.db('users').where('id', userId).update({ name })
+          break
+        }
+
+        case 'spawn': {
+          const roles = player.data.roles
+          if (!hasRole(roles, 'admin')) return
+          const action = args[0]
+          if (action === 'set') {
+            this.spawn = { position: player.data.position.slice(), quaternion: player.data.quaternion.slice() }
+          } else if (action === 'clear') {
+            this.spawn = { position: [0, 0, 0], quaternion: [0, 0, 0, 1] }
+          } else {
+            break
+          }
+        }
+
+        case 'chat': {
+          const code = args[0]
+          if (code !== 'clear') return
+          const player = socket.player
+          if (!hasRole(player.data.roles, 'admin')) {
+            return
+          }
+          this.world.chat.clear(true)
           return
         }
-        const data = JSON.stringify(this.spawn)
-        await this.db('config')
-          .insert({
-            key: 'spawn',
-            value: data,
-          })
-          .onConflict('key')
-          .merge({
-            value: data,
-          })
-      }
-      if (cmd === 'chat') {
-        const code = arg1
-        if (code !== 'clear') return
-        const player = socket.player
-        if (!hasRole(player.data.roles, 'admin')) {
-          return
-        }
-        this.world.chat.clear(true)
-        return
+
+        default:
+          if (!this.world.chat.commands.has(cmd)) break
+
+          const { fn, isAdmin } = this.world.chat.commands.get(cmd)
+          if (isAdmin && !hasRole(user.roles, 'admin')) break
+
+          fn(socket.id, ...args)
+          break
       }
       return
     }
