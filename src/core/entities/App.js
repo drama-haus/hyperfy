@@ -460,6 +460,7 @@ export class App extends Entity {
         this.raycastHit.player = hit.handle?.player
         return this.raycastHit
       },
+<<<<<<< HEAD
       // applyEffect(effect) {
       //   effect.entityId = entity.data.id
       //   if (effect?.anchor) {
@@ -490,6 +491,12 @@ export class App extends Entity {
       //     world.network.send('playerEffect', effect)
       //   }
       // },
+=======
+      getEvm() {
+        const { world: _, ...evm } = world.evm
+        return evm
+      },
+>>>>>>> dev_cow_evm
     }
   }
 
