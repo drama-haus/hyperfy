@@ -16,6 +16,7 @@ import { LODs } from './systems/LODs'
 import { Nametags } from './systems/Nametags'
 import { Snaps } from './systems/Snaps'
 import { XR } from './systems/XR'
+import { Solana } from './systems/ClientSolana'
 
 export function createClientWorld() {
   const world = new World()
@@ -35,5 +36,6 @@ export function createClientWorld() {
   world.register('nametags', Nametags)
   world.register('snaps', Snaps)
   world.register('xr', XR)
+  world.register('solana', Solana)
   return world
 }
