@@ -8,6 +8,16 @@ import { css } from '@firebolt-dev/css'
 import { createClientWorld } from '../core/createClientWorld'
 import { loadPhysX } from './loadPhysX'
 import { CoreUI } from './components/CoreUI'
+import { WalletProvider } from './components/WalletProvider'
+
+import * as buf from 'buffer'
+
+const Buffer = buf.default.Buffer
+
+// client support
+if (typeof window !== 'undefined') {
+  globalThis.Buffer = Buffer
+}
 
 function App() {
   const viewportRef = useRef()
@@ -54,7 +64,9 @@ function App() {
     >
       <div className='App__viewport' ref={viewportRef}>
         <div className='App__ui' ref={uiRef}>
-          <CoreUI world={world} />
+          <WalletProvider>
+            <CoreUI world={world} />
+          </WalletProvider>
         </div>
       </div>
     </div>
