@@ -950,6 +950,12 @@ export class PlayerLocal extends Entity {
     if (avatarChanged) {
       this.applyAvatar()
     }
+    if (data.hasOwnProperty('evm')) {
+      this.data.evm = data.evm
+      this.world.network.send('entityModified', { id: this.data.id, ...data })
+      this.world.events.emit('evm', { playerId: this.data.id })
+      // changed = true
+    }
     if (changed) {
       this.world.emit('player', this)
     }
