@@ -8,11 +8,16 @@ import { css } from '@firebolt-dev/css'
 import { createClientWorld } from '../core/createClientWorld'
 import { loadPhysX } from './loadPhysX'
 import { CoreUI } from './components/CoreUI'
+import { Providers } from './components/Providers'
+import * as evmActions from 'wagmi/actions'
+import { useConfig, useAccount } from 'wagmi'
+import * as utils from 'viem/utils'
 
 function App() {
   const viewportRef = useRef()
   const uiRef = useRef()
   const world = useMemo(() => createClientWorld(), [])
+  const { address } = useAccount()
   useEffect(() => {
     const viewport = viewportRef.current
     const ui = uiRef.current
@@ -30,6 +35,33 @@ function App() {
     }
     world.init({ viewport, ui, wsUrl, loadPhysX, baseEnvironment })
   }, [])
+
+  const config = useConfig()
+  const [initialized, setInitialized] = useState(false)
+  useEffect(() => {
+    if (initialized) return
+    setInitialized(true)
+
+    let evm = { actions: {}, utils }
+    for (const [action, fn] of Object.entries(evmActions)) {
+      evm.actions[action] = (...args) => fn(config, ...args)
+    }
+
+    world.evm = evm
+  }, [config])
+
+  useEffect(() => {
+    const handlePlayer = player => {
+      world.entities.player.modify({ evm: address })
+      world.off('player', handlePlayer)
+    }
+    world.on('player', handlePlayer)
+
+    return () => {
+      world.off(handlePlayer)
+    }
+  }, [])
+
   return (
     <div
       className='App'
@@ -62,4 +94,8 @@ function App() {
 }
 
 const root = createRoot(document.getElementById('root'))
-root.render(<App />)
+root.render(
+  <Providers>
+    <App />
+  </Providers>
+)

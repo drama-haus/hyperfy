@@ -494,6 +494,11 @@ export class App extends Entity {
           return hit.proxy
         })
       },
+      getEvm() {
+        const { world: _, ...evm } = world.evm
+        return evm
+      },
+      },
     }
   }
 
