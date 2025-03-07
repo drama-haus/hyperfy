@@ -190,6 +190,11 @@ export class Apps extends System {
         const event = [entity.data.id, entity.blueprint.version, name, data]
         world.network.send('entityEvent', event, ignoreSocketId)
       },
+      sendTo(nid, name, data) {
+        if (world.network.isClient) return // client cant send events to other clients, unless...?
+        const event = [entity.data.id, entity.blueprint.version, name, data]
+        world.network.sendTo(nid, 'entityEvent', event)
+      },
       emit(entity, name, data) {
         if (internalEvents.includes(name)) {
           return console.error(`apps cannot emit internal events (${name})`)
@@ -233,6 +238,10 @@ export class Apps extends System {
           }
         }
         entity.onFields?.(entity.fields)
+      },
+      solana() {
+        const { world: _world, ...solana } = world.solana // do not expose entire world to script
+        return solana
       },
     }
   }
