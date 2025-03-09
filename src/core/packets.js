@@ -15,6 +15,8 @@ const names = [
   'entityRemoved',
   'playerTeleport',
   'playerPush',
+  'requestTokenMetadata',
+  'tokenMetadata'
 ]
 
 const byName = {}
