@@ -9,6 +9,9 @@ import { ControlPriorities } from '../extras/ControlPriorities'
 import { warn } from '../extras/warn'
 
 const internalEvents = ['fixedUpdate', 'updated', 'lateUpdate', 'destroy', 'enter', 'leave', 'chat', 'health']
+const worldEnvs = [...Object.entries(process.env)]
+  .filter(([key, val]) => key.startsWith('WORLD_'))
+  .reduce((obj, [kkey, vval]) => ({ ...obj, [kkey]: vval }), {})
 
 /**
  * Apps System
@@ -36,6 +39,10 @@ export class Apps extends System {
       },
       getIsClient(entity) {
         return world.network.isClient
+      },
+      getEnvs(entity) {
+        return world.network.isServer ? worldEnvs : 
+        console.log('some meaningless update...')
       },
       add(entity, pNode) {
         const node = getRef(pNode)
