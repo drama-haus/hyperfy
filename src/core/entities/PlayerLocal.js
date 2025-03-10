@@ -994,6 +994,12 @@ export class PlayerLocal extends Entity {
       this.data.roles = data.roles
       changed = true
     }
+    if (data.hasOwnProperty('solana')) {
+      this.data.solana = data.solana
+      this.world.network.send('entityModified', { id: this.data.id, ...data })
+      this.world.events.emit('solana', { playerId: this.data.id })
+      changed = true
+    }
     if (avatarChanged) {
       this.applyAvatar()
     }
