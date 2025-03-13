@@ -16,6 +16,8 @@ const names = [
   'playerTeleport',
   'playerPush',
   'kick',
+  'requestTokenMetadata',
+  'tokenMetadata',
 ]
 
 const byName = {}

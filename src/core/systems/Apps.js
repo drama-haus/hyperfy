@@ -257,6 +257,10 @@ export class Apps extends System {
         }
         entity.onFields?.(entity.fields)
       },
+      solana() {
+        const { world: _world, ...solana } = world.solana // do not expose entire world to script
+        return solana
+      },
     }
   }
 
