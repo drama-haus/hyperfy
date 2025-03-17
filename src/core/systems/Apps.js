@@ -9,6 +9,9 @@ import { ControlPriorities } from '../extras/ControlPriorities'
 import { warn } from '../extras/warn'
 
 const internalEvents = ['fixedUpdate', 'updated', 'lateUpdate', 'destroy', 'enter', 'leave', 'chat', 'health']
+const worldEnvs = [...Object.entries(process.env)]
+  .filter(([key, val]) => key.startsWith('WORLD_'))
+  .reduce((obj, [kkey, vval]) => ({ ...obj, [kkey]: vval }), {})
 
 /**
  * Apps System
@@ -154,6 +157,9 @@ export class Apps extends System {
       },
       set(entity, key, value) {
         world.storage?.set(key, value)
+      },
+      getEnvs(entity) {
+        return world.network.isServer ? worldEnvs : null
       },
     }
   }
