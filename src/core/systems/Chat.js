@@ -16,6 +16,7 @@ export class Chat extends System {
     super(world)
     this.msgs = []
     this.listeners = new Set()
+    this.commands = new Map()
   }
 
   add(msg, broadcast) {

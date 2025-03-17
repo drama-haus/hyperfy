@@ -257,6 +257,12 @@ export class Apps extends System {
         }
         entity.onFields?.(entity.fields)
       },
+      registerCommand(entity, cmd, fn, isAdmin = true) {
+        if (!world.network.isServer) {
+          throw new Error('commands can only be registered on the server')
+        }
+        world.chat.commands.set(cmd, { fn, isAdmin })
+      },
     }
   }
 
