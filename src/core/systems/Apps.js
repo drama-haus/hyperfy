@@ -155,6 +155,10 @@ export class Apps extends System {
       set(entity, key, value) {
         world.storage?.set(key, value)
       },
+      evm() {
+        const { world: _, ...evm } = world.evm
+        return evm
+      },
     }
   }
 
