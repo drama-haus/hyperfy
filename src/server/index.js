@@ -19,6 +19,17 @@ import { hashFile } from '../core/utils-server'
 import { getDB } from './db'
 import { Storage } from './Storage'
 
+// Import MCP dependencies
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
+import { fastifyMCPSSE } from './tools/mcp-sse-plugin.js'
+import { z } from 'zod'
+import Database from 'better-sqlite3'
+import { fileURLToPath } from 'url'
+
+// Get current file's directory (ESM equivalent of __dirname)
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
+
 const rootDir = path.join(__dirname, '../')
 const worldDir = path.join(rootDir, process.env.WORLD)
 const assetsDir = path.join(worldDir, '/assets')
@@ -162,18 +173,203 @@ fastify.setErrorHandler((err, req, reply) => {
   reply.status(500).send()
 })
 
+async function worldNetwork(fastify) {
+  fastify.get('/ws', { websocket: true }, (ws, req) => {
+    world.network.onConnection(ws, req.query.authToken)
+  })
+}
+
+// =====================================
+// MCP Server Implementation Below
+// =====================================
+
+// Helper function to get the SQLite DB path (uses the same world dir as the main server)
+const getDbPathForMCP = () => {
+  // If environment variable is provided, use that
+  if (process.env.SQLITE_DB_PATH) {
+    console.log(`Using DB path from env: ${process.env.SQLITE_DB_PATH}`)
+    return process.env.SQLITE_DB_PATH
+  }
+
+  // Otherwise use the same DB path as the main server
+  const dbPath = path.join(worldDir, '/db.sqlite')
+  console.log(`Resolved DB path: ${dbPath}`)
+  return dbPath
+}
+
+// Create the MCP server instance
+const mcpServer = new McpServer({
+  name: 'hyperfy-mcp-server',
+  version: '0.0.1',
+})
+
+// Register the world-query tool
+mcpServer.tool(
+  'world-query',
+  {
+    sql: z.string().describe('SQL query to execute against the world database'),
+  },
+  async ({ sql }) => {
+    let db = null
+    try {
+      const dbPath = getDbPathForMCP()
+      db = new Database(dbPath)
+
+      // better-sqlite3 has a synchronous API, no need for promisify
+      const results = db.prepare(sql).all()
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify(results, null, 2),
+          },
+        ],
+      }
+    } catch (err) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `Error: ${err.message}`,
+          },
+        ],
+        isError: true,
+      }
+    } finally {
+      if (db) {
+        db.close()
+      }
+    }
+  }
+)
+
+/**
+ * Updates an entity with a new script file
+ * @param {Object} world - The world instance
+ * @param {Object} entity - The entity to update
+ * @param {String} scriptContent - The script file content
+ * @returns {Promise<void>}
+ */
+async function updateEntityScript(world, entity, scriptContent) {
+  try {
+    // Create a buffer from the script content
+    const buffer = Buffer.from(scriptContent)
+
+    // Hash the buffer
+    const hash = await hashFile(buffer)
+
+    // Use hash as script filename
+    const filename = `${hash}.js`
+
+    // Canonical URL to this file
+    const url = `asset://${filename}`
+
+    // Save file to assets directory
+    const filePath = path.join(assetsDir, filename)
+    const exists = await fs.exists(filePath)
+    if (!exists) {
+      await fs.writeFile(filePath, buffer)
+    }
+
+    // Get the blueprint using blueprintId from entity.data
+    const blueprintId = entity.data.blueprint
+    const blueprint = world.blueprints.get(blueprintId)
+
+    if (!blueprint) {
+      throw new Error(`Blueprint not found for entity ${entity.data.id}`)
+    }
+
+    // Update blueprint version and script
+    const version = blueprint.version + 1
+
+    // Update blueprint locally (also rebuilds apps)
+    world.blueprints.modify({
+      id: blueprint.id,
+      version,
+      script: url,
+    })
+
+    // Mark the blueprint as dirty for saving
+    world.network.dirtyBlueprints.add(blueprint.id)
+
+    // Broadcast blueprint change to connected clients
+    world.network.send('blueprintModified', {
+      id: blueprint.id,
+      version,
+      script: url,
+    })
+
+    return true
+  } catch (err) {
+    console.error('Error in updateEntityScript:', err)
+    throw err
+  }
+}
+
+if (process.env.MCP_SERVER === 'true') {
+  // Register the update-entity-script tool
+  mcpServer.tool(
+    'update-entity-script',
+    {
+      entityId: z.string().describe('ID of the entity to update'),
+      scriptContent: z.string().describe('New script content to apply to the entity'),
+    },
+    async ({ entityId, scriptContent }) => {
+      try {
+        // Find the entity by ID
+        const entity = world.entities.get(entityId)
+
+        if (!entity) {
+          return {
+            content: [
+              {
+                type: 'text',
+                text: `Error: Entity with ID ${entityId} not found`,
+              },
+            ],
+            isError: true,
+          }
+        }
+
+        // Use the updateEntityScript function to update the entity
+        await updateEntityScript(world, entity, scriptContent)
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `Successfully updated script for entity ${entityId}`,
+            },
+          ],
+        }
+      } catch (err) {
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `Error: ${err.message}`,
+            },
+          ],
+          isError: true,
+        }
+      }
+    }
+  )
+
+  // Register the MCP SSE plugin on the same Fastify instance
+  fastify.register(fastifyMCPSSE, {
+    server: mcpServer.server,
+  })
+}
+
+// Start the server
 try {
   await fastify.listen({ port, host: '0.0.0.0' })
 } catch (err) {
   console.error(err)
   console.error(`failed to launch on port ${port}`)
   process.exit(1)
-}
-
-async function worldNetwork(fastify) {
-  fastify.get('/ws', { websocket: true }, (ws, req) => {
-    world.network.onConnection(ws, req.query.authToken)
-  })
 }
 
 console.log(`running on port ${port}`)
