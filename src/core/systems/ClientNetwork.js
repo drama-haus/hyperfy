@@ -184,6 +184,19 @@ export class ClientNetwork extends System {
     this.world.emit('kick', code)
   }
 
+  onTokenMetadata = ({ tokenMint, metadata }) => {
+    console.log(`Received metadata for token: ${tokenMint}`, metadata)
+
+    // Get the Solana system
+    const solana = this.world.solana
+    if (!solana) {
+      console.error('Solana system not initialized')
+      return
+    }
+
+    solana.tokens.set(tokenMint, metadata)
+  }
+
   onClose = code => {
     this.world.emit('disconnect', code || true)
     console.log('disconnect', code)

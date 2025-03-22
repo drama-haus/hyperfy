@@ -441,4 +441,44 @@ export class ServerNetwork extends System {
     socket.player.destroy(true)
     this.sockets.delete(socket.id)
   }
+
+  onRequestTokenMetadata = async (socket, tokenMint) => {
+    try {
+      console.log(`Received token metadata request for: ${tokenMint} from socket ${socket.id}`)
+
+      // Get the Solana system
+      const solana = this.world.solana
+      if (!solana) {
+        console.error('Solana system not initialized')
+        return
+      }
+
+      // Get token metadata from the server's Solana system
+      const token = await solana.programs.token(tokenMint)
+
+      if (!token) {
+        console.error(`Token metadata not found for: ${tokenMint}`)
+        return
+      }
+
+      // Extract just the metadata properties
+      const metadata = {
+        decimals: token.decimals,
+        supply: token.supply,
+        name: token.name,
+        symbol: token.symbol,
+        uri: token.uri,
+      }
+
+      // Send metadata back to the client
+      this.sendTo(socket.id, 'tokenMetadata', {
+        tokenMint,
+        metadata,
+      })
+
+      console.log(`Sent metadata for token: ${tokenMint} to socket ${socket.id}`)
+    } catch (error) {
+      console.error(`Error processing token metadata request for ${tokenMint}:`, error)
+    }
+  }
 }
