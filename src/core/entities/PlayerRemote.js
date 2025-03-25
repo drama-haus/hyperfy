@@ -192,6 +192,9 @@ export class PlayerRemote extends Entity {
     if (data.hasOwnProperty('roles')) {
       this.data.roles = data.roles
     }
+    if (data.hasOwnProperty('custom')) {
+      this.data.custom = data.custom
+    }
     if (avatarChanged) {
       this.applyAvatar()
     }

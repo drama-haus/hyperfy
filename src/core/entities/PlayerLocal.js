@@ -994,6 +994,11 @@ export class PlayerLocal extends Entity {
       this.data.roles = data.roles
       changed = true
     }
+    // Handle custom data for injected properties
+    if (data.hasOwnProperty('custom')) {
+      this.data.custom = data.custom
+      changed = true
+    }
     if (avatarChanged) {
       this.applyAvatar()
     }

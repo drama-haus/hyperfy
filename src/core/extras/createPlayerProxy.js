@@ -10,7 +10,9 @@ export function createPlayerProxy(player) {
   const rotation = new THREE.Euler()
   const quaternion = new THREE.Quaternion()
   let activeEffectConfig = null
-  return {
+  
+  // Create the base proxy with default properties and methods
+  const baseProxy = {
     get networkId() {
       return player.data.owner
     },
@@ -153,4 +155,43 @@ export function createPlayerProxy(player) {
       }
     },
   }
+  
+  // Create a dynamic proxy that can access both the base properties and injected ones
+  return new Proxy(
+    baseProxy,
+    {
+      get: (target, prop) => {
+        // First check base proxy properties
+        if (prop in target) {
+          return target[prop]
+        }
+        
+        // Check injected getters
+        if (world.apps.playerGetters && prop in world.apps.playerGetters) {
+          return world.apps.playerGetters[prop](player)
+        }
+        
+        // Check injected methods
+        if (world.apps.playerMethods && prop in world.apps.playerMethods) {
+          const method = world.apps.playerMethods[prop]
+          return (...args) => {
+            return method(player, ...args)
+          }
+        }
+        
+        return undefined
+      },
+      set: (target, prop, value) => {
+        // Check injected setters
+        if (world.apps.playerSetters && prop in world.apps.playerSetters) {
+          world.apps.playerSetters[prop](player, value)
+          return true
+        }
+        
+        // Allow setting properties on the base proxy
+        target[prop] = value
+        return true
+      }
+    }
+  )
 }
