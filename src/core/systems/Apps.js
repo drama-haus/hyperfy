@@ -1,5 +1,5 @@
 import moment from 'moment'
-import { isArray, isEqual, isFunction, isNumber } from 'lodash-es'
+import { isArray, isEqual, isFunction, isNumber, cloneDeep } from 'lodash-es'
 import * as THREE from '../extras/three'
 
 import { System } from './System'
@@ -7,6 +7,7 @@ import { getRef } from '../nodes/Node'
 import { Layers } from '../extras/Layers'
 import { ControlPriorities } from '../extras/ControlPriorities'
 import { warn } from '../extras/warn'
+import { uuid } from '../utils'
 
 const internalEvents = ['fixedUpdate', 'updated', 'lateUpdate', 'destroy', 'enter', 'leave', 'chat', 'health']
 
@@ -157,29 +158,81 @@ export class Apps extends System {
       },
       open(entity, url, newWindow = false) {
         if (!url) {
-          console.error('[world.open] URL is required');
-          return;
+          console.error('[world.open] URL is required')
+          return
         }
-        
+
         if (world.network.isClient) {
           try {
-            const resolvedUrl = world.resolveURL(url);
-            
+            const resolvedUrl = world.resolveURL(url)
+
             setTimeout(() => {
               if (newWindow) {
-                window.open(resolvedUrl, '_blank');
+                window.open(resolvedUrl, '_blank')
               } else {
-                window.location.href = resolvedUrl;
+                window.location.href = resolvedUrl
               }
-            }, 0);
-            
-            console.log(`[world.open] Redirecting to: ${resolvedUrl} ${newWindow ? '(new window)' : ''}`);
+            }, 0)
+
+            console.log(`[world.open] Redirecting to: ${resolvedUrl} ${newWindow ? '(new window)' : ''}`)
           } catch (e) {
-            console.error('[world.open] Failed to open URL:', e);
+            console.error('[world.open] Failed to open URL:', e)
           }
         } else {
-          console.warn('[world.open] URL redirection only works on client side');
+          console.warn('[world.open] URL redirection only works on client side')
         }
+      },
+      spawnEntity(_, blueprintId, position, rotation) {
+        if (world.isClient) return
+        if (_.blueprint?.id === blueprintId) return
+
+        const blueprint = world.blueprints.get(blueprintId)
+        if (!blueprint) return
+
+        let finalBlueprintId = blueprintId
+
+        // If unique, duplicate the blueprint similar to client-side
+        if (blueprint.unique) {
+          const newBlueprint = {
+            id: uuid(),
+            version: 0,
+            name: blueprint.name,
+            image: blueprint.image,
+            author: blueprint.author,
+            url: blueprint.url,
+            desc: blueprint.desc,
+            model: blueprint.model,
+            script: blueprint.script,
+            props: cloneDeep(blueprint.props),
+            preload: blueprint.preload,
+            public: blueprint.public,
+            locked: blueprint.locked,
+            frozen: blueprint.frozen,
+            unique: blueprint.unique,
+          }
+          world.blueprints.add(newBlueprint, true)
+          finalBlueprintId = newBlueprint.id
+        }
+
+        // Create entity data similar to client-side
+        const data = {
+          id: uuid(),
+          type: 'app',
+          blueprint: finalBlueprintId,
+          position: position ? (position.toArray ? position.toArray() : position) : [0, 0, 0],
+          quaternion: rotation ? (rotation.toArray ? rotation.toArray() : rotation) : [0, 0, 0, 1],
+          // mover: world.network.id,
+          // uploader: null,
+          pinned: false,
+          state: {},
+        }
+
+        const entity = world.entities.add(data, true)
+        if (entity.isApp) world.network.dirtyApps.add(entity.data.id)
+        if (finalBlueprintId !== blueprintId) {
+          world.network.dirtyBlueprints.add(finalBlueprintId)
+        }
+        return entity
       },
     }
   }
