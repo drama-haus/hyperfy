@@ -13,10 +13,13 @@ import { buttons, propToLabel } from '../../core/extras/buttons'
 import { cls } from '../utils'
 import { uuid } from '../../core/utils'
 import { ControlPriorities } from '../../core/extras/ControlPriorities'
+
 import { AppsPane } from './AppsPane'
 import { MenuMain } from './MenuMain'
 import { MenuApp } from './MenuApp'
 import { KeyboardIcon, MenuIcon, VRIcon } from './Icons'
+
+import { useConnect, useConnectors } from 'wagmi'
 
 export function CoreUI({ world }) {
   const [ref, width, height] = useElemSize()
@@ -134,6 +137,8 @@ function Side({ world, menu }) {
       world.prefs.off('change', onChange)
     }
   }, [])
+  const { connect } = useConnect()
+  const connectors = useConnectors()
   useEffect(() => {
     const control = world.controls.bind({ priority: ControlPriorities.CORE_UI })
     control.slash.onPress = () => {
@@ -167,10 +172,16 @@ function Side({ world, menu }) {
     setMsg('')
     // check for client commands
     if (msg.startsWith('/')) {
-      const [cmd, arg1, arg2] = msg.slice(1).split(' ')
+      const [cmd, ...args] = msg.slice(1).split(' ')
       if (cmd === 'stats') {
         world.stats.toggle()
         return
+      } else if (cmd === 'connect') {
+        const [chain] = args
+        if (chain == 'evm') {
+          console.log('connect default evm chain')
+          connect({ connector: connectors?.[0] })
+        }
       }
     }
     // otherwise post it
