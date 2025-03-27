@@ -40,6 +40,7 @@ export class Physics extends System {
   constructor(world) {
     super(world)
     this.scene = null
+    this.controllerHandles = new Map() // Store controller handles
   }
 
   async init({ loadPhysX }) {
@@ -451,22 +452,71 @@ export class Physics extends System {
   //   // TODO: this.overlapResult.destroy() on this.destroy()
   // }
 
+  // Register a controller with a handle for queries like overlapSphere
+  registerController(controller, handle) {
+    if (!controller) return null
+    
+    handle.controller = controller
+    handle.contactedHandles = new Set()
+    handle.triggeredHandles = new Set()
+    
+    const handleId = controller.ptr
+    this.controllerHandles.set(handleId, handle)
+    
+    return handleId
+  }
+
+  // Unregister a controller
+  unregisterController(handleId) {
+    if (!handleId) return
+    this.controllerHandles.delete(handleId)
+  }
+
   overlapSphere(radius, origin, layerMask) {
     origin.toPxVec3(this.overlapPose.p)
     const geometry = getSphereGeometry(radius)
     this.queryFilterData.data.word0 = layerMask // what to hit, eg Layers.player.group | Layers.environment.group
     this.queryFilterData.data.word1 = 0
     const didHit = this.scene.overlap(geometry, this.overlapPose, this.overlapResult, this.queryFilterData)
-    if (!didHit) return []
     overlapHits.length = 0
-    const numHits = this.overlapResult.getNbAnyHits()
-    for (let n = 0; n < numHits; n++) {
-      const nHit = this.overlapResult.getAnyHit(n)
-      const hit = getOrCreateOverlapHit(n)
-      hit.actor = nHit.actor
-      hit.handle = this.handles.get(nHit.actor.ptr)
-      overlapHits.push(hit)
+    
+    // First add regular actor hits
+    if (didHit) {
+      const numHits = this.overlapResult.getNbAnyHits()
+      for (let n = 0; n < numHits; n++) {
+        const nHit = this.overlapResult.getAnyHit(n)
+        const hit = getOrCreateOverlapHit(n)
+        hit.actor = nHit.actor
+        hit.handle = this.handles.get(nHit.actor.ptr)
+        overlapHits.push(hit)
+      }
     }
+    
+    // Then check for controller collisions
+    if (this.controllerHandles.size > 0) {
+      const overlapPosition = new THREE.Vector3(origin.x, origin.y, origin.z)
+      
+      // Check each controller
+      this.controllerHandles.forEach((handle, ptr) => {
+        const controller = handle.controller
+        if (!controller) return
+        
+        // Get controller position
+        const footPos = controller.getFootPosition()
+        const controllerPos = new THREE.Vector3(footPos.x, footPos.y + (handle.node?._height || 0)/2 + (handle.node?._radius || 0), footPos.z)
+        
+        // Check if within radius
+        const distance = controllerPos.distanceTo(overlapPosition)
+        if (distance <= radius + (handle.node?._radius || 0)) {
+          // Create an overlap hit for this controller
+          const hit = getOrCreateOverlapHit(overlapHits.length)
+          hit.actor = null
+          hit.handle = handle
+          overlapHits.push(hit)
+        }
+      })
+    }
+    
     return overlapHits
   }
 }

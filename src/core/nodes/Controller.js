@@ -1,5 +1,5 @@
 import * as THREE from '../extras/three'
-import { isNumber, isBoolean } from 'lodash-es'
+import { isNumber, isBoolean, isString } from 'lodash-es'
 
 import { DEG2RAD } from '../extras/general'
 
@@ -9,6 +9,7 @@ const defaults = {
   radius: 0.4,
   height: 1,
   visible: false,
+  tag: null,
 }
 
 export class Controller extends Node {
@@ -19,6 +20,7 @@ export class Controller extends Node {
     this.radius = data.radius
     this.height = data.height
     this.visible = data.visible
+    this.tag = data.tag
   }
 
   mount() {
@@ -50,6 +52,19 @@ export class Controller extends Node {
     PHYSX.destroy(desc)
     const worldPosition = this.getWorldPosition()
     this.controller.setFootPosition(worldPosition.toPxExtVec3())
+    
+    // Register controller with tag for physics queries
+    const self = this
+    this.controllerHandle = this.ctx.world.physics.registerController(this.controller, {
+      node: this,
+      get tag() {
+        return self._tag
+      },
+      get playerId() {
+        // const playerId = this.ctx.entity?.isPlayer ? this.ctx.entity.data.id : null
+        return null
+      }
+    })
   }
 
   commit(didMove) {
@@ -75,8 +90,10 @@ export class Controller extends Node {
       this.ctx.world.graphics.scene.remove(this.mesh)
     }
     if (this.controller) {
+      this.ctx.world.physics.unregisterController(this.controllerHandle)
       this.controller.release()
       this.controller = null
+      this.controllerHandle = null
     }
   }
 
@@ -85,6 +102,7 @@ export class Controller extends Node {
     this._radius = source._radius
     this._height = source._height
     this._visible = source._visible
+    this._tag = source._tag
     return this
   }
 
@@ -124,6 +142,21 @@ export class Controller extends Node {
     }
     this._visible = value
     this.needsRebuild = true
+    this.setDirty()
+  }
+
+  get tag() {
+    return this._tag
+  }
+
+  set tag(value = defaults.tag) {
+    if (isNumber(value)) {
+      value = value + ''
+    }
+    if (value !== null && !isString(value)) {
+      throw new Error('[controller] tag not a string')
+    }
+    this._tag = value
     this.setDirty()
   }
 
@@ -175,6 +208,12 @@ export class Controller extends Node {
         },
         set visible(value) {
           self.visible = value
+        },
+        get tag() {
+          return self.tag
+        },
+        set tag(value) {
+          self.tag = value
         },
         get isGrounded() {
           return self.isGrounded
