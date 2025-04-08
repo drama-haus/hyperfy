@@ -213,6 +213,10 @@ export class Apps extends System {
           }
         })
       },
+      evm() {
+        const { world: _, ...evm } = world.evm
+        return evm
+      },
     }
   }
 

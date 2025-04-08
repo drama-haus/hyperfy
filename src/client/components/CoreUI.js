@@ -13,10 +13,13 @@ import { buttons, propToLabel } from '../../core/extras/buttons'
 import { cls } from '../utils'
 import { uuid } from '../../core/utils'
 import { ControlPriorities } from '../../core/extras/ControlPriorities'
+
 import { AppsPane } from './AppsPane'
 import { MenuMain } from './MenuMain'
 import { MenuApp } from './MenuApp'
 import { KeyboardIcon, MenuIcon, VRIcon } from './Icons'
+
+import { useConnect, useConnectors } from 'wagmi'
 
 export function CoreUI({ world }) {
   const [ref, width, height] = useElemSize()
@@ -135,6 +138,8 @@ function Side({ world, menu }) {
       world.prefs.off('change', onChange)
     }
   }, [])
+  const { connect } = useConnect()
+  const connectors = useConnectors()
   useEffect(() => {
     const control = world.controls.bind({ priority: ControlPriorities.CORE_UI })
     control.slash.onPress = () => {
