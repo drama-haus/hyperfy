@@ -4,6 +4,7 @@ import { Server } from './systems/Server'
 import { ServerNetwork } from './systems/ServerNetwork'
 import { ServerLoader } from './systems/ServerLoader'
 import { ServerEnvironment } from './systems/ServerEnvironment'
+import { EVM } from './systems/EVM'
 
 export function createServerWorld() {
   const world = new World()
@@ -11,5 +12,7 @@ export function createServerWorld() {
   world.register('network', ServerNetwork)
   world.register('loader', ServerLoader)
   world.register('environment', ServerEnvironment)
+  world.register('evm', EVM)
   return world
 }
+s
