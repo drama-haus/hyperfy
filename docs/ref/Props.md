@@ -89,9 +89,24 @@ A range slider input
 }
 ```
 
+### Toggle
+
+A boolean toggle field
+
+```jsx
+{
+  type: 'toggle',
+  key: String,           // the key on `props` to set this value
+  label: String,         // the label for the text input
+  trueLabel: String,     // optional, defaults to "Yes"
+  falseLabel: String,    // optional, defaults to "No"
+  initial: String,       // the initial value to set if not configured
+}
+```
+
 ### Switch
 
-A switch input
+A switch field with many options
 
 ```jsx
 {
@@ -101,25 +116,6 @@ A switch input
   options: [
     {
       label: String,     // the label to show on this switch item
-      value: String,     // the value to set on the props when selected
-    }
-  ],
-  initial: String,       // the initial value to set if not configured
-}
-```
-
-### Dropdown
-
-A dropdown menu
-
-```jsx
-{
-  type: 'dropdown',
-  key: String,           // the key on `props` to set this value
-  label: String,         // the label for the text input
-  options: [
-    {
-      label: String,     // the label to show on this item
       value: String,     // the value to set on the props when selected
     }
   ],
@@ -159,14 +155,15 @@ const audio = app.create('audio', {
 audio.play()
 ```
 
-### Section
+### Button
 
-A simple section header to help group fields together
+Displays a button that when clicked, executes something in the running app.
 
 ```jsx
 {
-  type: 'section',
-  key: String,           // a unique `key` to represent this section
-  label: String,         // the label for the section header
+  type: 'button',
+  key: String,           // a unique `key` for this button
+  label: String,         // the label for the button
+  onClick: Function,
 }
 ```

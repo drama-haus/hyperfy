@@ -1,6 +1,7 @@
 import * as THREE from './extras/three'
 import EventEmitter from 'eventemitter3'
 
+import { Settings } from './systems/Settings'
 import { Apps } from './systems/Apps'
 import { Anchors } from './systems/Anchors'
 import { Events } from './systems/Events'
@@ -31,6 +32,7 @@ export class World extends EventEmitter {
     this.camera = new THREE.PerspectiveCamera(70, 0, 0.2, 1200)
     this.rig.add(this.camera)
 
+    this.register('settings', Settings)
     this.register('apps', Apps)
     this.register('anchors', Anchors)
     this.register('events', Events)
@@ -184,7 +186,7 @@ export class World extends EventEmitter {
   }
 
   setupMaterial = material => {
-    this.environment?.csm.setupMaterial(material)
+    this.environment.csm?.setupMaterial(material)
   }
 
   setHot(item, hot) {
@@ -215,6 +217,10 @@ export class World extends EventEmitter {
       return url
     }
     return `https://${url}`
+  }
+
+  inject(runtime) {
+    this.apps.inject(runtime)
   }
 
   destroy() {

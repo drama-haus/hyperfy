@@ -60,6 +60,15 @@ for (const file of files) {
   fileAssets.add(relPath)
 }
 
+let worldModel
+let worldAvatar
+let settings = await db('config').where('key', 'settings').first()
+if (settings) {
+  settings = JSON.parse(settings.value)
+  if (settings.model) worldModel = settings.model.url.replace('asset://', '')
+  if (settings.avatar) worldAvatar = settings.avatar.url.replace('asset://', '')
+}
+
 /**
  * Phase 1:
  * Remove all blueprints that no entities reference any more.
@@ -84,7 +93,11 @@ for (const blueprint of blueprintsToDelete) {
 
 /**
  * Phase 2:
- * Remove all asset files not referenced by a blueprint or used as an avatar.
+ * Remove all asset files that are not:
+ * - referenced by a blueprint
+ * - used as a player avatar
+ * - used as the world avatar
+ * - used as the world model
  * The world no longer uses/needs them.
  *
  */
@@ -118,7 +131,9 @@ const filesToDelete = []
 for (const fileAsset of fileAssets) {
   const isUsedByBlueprint = blueprintAssets.has(fileAsset)
   const isUsedByUser = vrms.has(fileAsset)
-  if (!isUsedByBlueprint && !isUsedByUser) {
+  const isWorldModel = fileAsset === worldModel
+  const isWorldAvatar = fileAsset === worldAvatar
+  if (!isUsedByBlueprint && !isUsedByUser && !isWorldModel && !isWorldAvatar) {
     filesToDelete.push(fileAsset)
   }
 }

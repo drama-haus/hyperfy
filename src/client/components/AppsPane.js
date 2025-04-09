@@ -39,40 +39,38 @@ export function AppsPane({ world, close }) {
         position: absolute;
         top: 20px;
         left: 20px;
-        width: 540px;
-        background: rgba(22, 22, 28, 1);
-        border: 1px solid rgba(255, 255, 255, 0.03);
-        border-radius: 10px;
-        box-shadow: rgba(0, 0, 0, 0.5) 0px 10px 30px;
+        width: 38rem;
+        background-color: rgba(15, 16, 24, 0.8);
         pointer-events: auto;
         display: flex;
         flex-direction: column;
+        font-size: 1rem;
         .apane-head {
-          height: 50px;
-          border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+          height: 3.125rem;
+          background: black;
           display: flex;
           align-items: center;
-          padding: 0 13px 0 20px;
+          padding: 0 0.8125rem 0 1.25rem;
           &-title {
-            padding-left: 7px;
+            font-size: 1.2rem;
             font-weight: 500;
             flex: 1;
           }
           &-search {
-            width: 150px;
+            width: 9.375rem;
             display: flex;
             align-items: center;
             svg {
-              margin-right: 5px;
+              margin-right: 0.3125rem;
             }
             input {
               flex: 1;
-              font-size: 14px;
+              font-size: 1rem;
             }
           }
           &-btn {
-            width: 30px;
-            height: 40px;
+            width: 1.875rem;
+            height: 2.5rem;
             display: flex;
             align-items: center;
             justify-content: center;
@@ -86,7 +84,6 @@ export function AppsPane({ world, close }) {
       `}
     >
       <div className='apane-head' ref={headRef}>
-        <ZapIcon size={16} />
         <div className='apane-head-title'>Apps</div>
         <div className='apane-head-search'>
           <SearchIcon size={16} />
@@ -194,24 +191,23 @@ function AppsPaneContent({ world, query, refresh }) {
   }
   const inspect = item => {
     const entity = getClosest(item)
-    world.emit('inspect', entity)
+    world.ui.setMenu({ type: 'app', app: entity })
   }
   return (
     <div
       className='asettings'
       css={css`
         flex: 1;
-        padding: 20px 20px 0;
+        padding: 1.25rem 1.25rem 0;
         .asettings-head {
           position: sticky;
           top: 0;
-          background: rgba(22, 22, 28, 1);
           display: flex;
           align-items: center;
-          margin: 0 0 5px;
+          margin: 0 0 0.3125rem;
         }
         .asettings-headitem {
-          font-size: 14px;
+          font-size: 1rem;
           font-weight: 500;
           white-space: nowrap;
           text-overflow: ellipsis;
@@ -219,20 +215,23 @@ function AppsPaneContent({ world, query, refresh }) {
           &.name {
             flex: 1;
           }
+          &.code {
+            width: 3rem;
+            text-align: right;
+          }
           &.count,
           &.geometries,
-          &.triangles,
-          &.code {
-            width: 50px;
+          &.triangles {
+            width: 4rem;
             text-align: right;
           }
           &.textureSize,
           &.fileSize {
-            width: 70px;
+            width: 5rem;
             text-align: right;
           }
           &.actions {
-            width: 60px;
+            width: 3.75rem;
             text-align: right;
           }
           &:hover:not(.active) {
@@ -244,16 +243,16 @@ function AppsPaneContent({ world, query, refresh }) {
         }
         .asettings-rows {
           overflow-y: auto;
-          padding-bottom: 20px;
-          max-height: 300px;
+          padding-bottom: 1.25rem;
+          max-height: 18.75rem;
         }
         .asettings-row {
           display: flex;
           align-items: center;
-          margin: 0 0 5px;
+          margin: 0 0 0.3125rem;
         }
         .asettings-rowitem {
-          font-size: 14px;
+          font-size: 1rem;
           color: rgba(255, 255, 255, 0.8);
           white-space: nowrap;
           text-overflow: ellipsis;
@@ -261,26 +260,29 @@ function AppsPaneContent({ world, query, refresh }) {
           &.name {
             flex: 1;
           }
+          &.code {
+            width: 3rem;
+            text-align: right;
+          }
           &.count,
           &.geometries,
-          &.triangles,
-          &.code {
-            width: 50px;
+          &.triangles {
+            width: 4rem;
             text-align: right;
           }
           &.textureSize,
           &.fileSize {
-            width: 70px;
+            width: 5rem;
             text-align: right;
           }
           &.actions {
-            width: 60px;
+            width: 3.75rem;
             display: flex;
             justify-content: flex-end;
           }
         }
         .asettings-action {
-          margin-left: 10px;
+          margin-left: 0.625rem;
           color: rgba(255, 255, 255, 0.4);
           &:hover:not(.active) {
             cursor: pointer;
@@ -357,7 +359,7 @@ function AppsPaneContent({ world, query, refresh }) {
               <span>{item.geometries}</span>
             </div>
             <div className='asettings-rowitem triangles'>
-              <span>{item.triangles}</span>
+              <span>{formatNumber(item.triangles)}</span>
             </div>
             <div className='asettings-rowitem textureSize'>
               <span>{item.textureSize}</span>
@@ -381,4 +383,23 @@ function AppsPaneContent({ world, query, refresh }) {
       </div>
     </div>
   )
+}
+
+function formatNumber(num) {
+  if (num === null || num === undefined || isNaN(num)) {
+    return '0'
+  }
+  const million = 1000000
+  const thousand = 1000
+  let result
+  if (num >= million) {
+    result = (num / million).toFixed(1) + 'M'
+  } else if (num >= thousand) {
+    result = (num / thousand).toFixed(1) + 'K'
+  } else {
+    result = Math.round(num).toString()
+  }
+  return result
+    .replace(/\.0+([KM])?$/, '$1') // Replace .0K with K or .0M with M
+    .replace(/(\.\d+[1-9])0+([KM])?$/, '$1$2') // Trim trailing zeros (1.50M → 1.5M)
 }

@@ -5,6 +5,7 @@ const packr = new Packr({ structuredClone: true })
 // prettier-ignore
 const names = [
   'snapshot',
+  'command',
   'chatAdded',
   'chatCleared',
   'blueprintAdded',
@@ -15,6 +16,14 @@ const names = [
   'entityRemoved',
   'playerTeleport',
   'playerPush',
+  'playerSessionAvatar',
+  'settingsModified',
+  'spawnModified',
+  'kick',
+  'ping',
+  'pong',
+  'requestTokenMetadata',
+  'tokenMetadata',
 ]
 
 const byName = {}

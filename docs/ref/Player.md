@@ -6,19 +6,19 @@ Represents a player. An instance of Player can be retrived via [World.getPlayer]
 
 ### `.id`: String
 
-The players entity id. This is a unique id given each time the player connects to the world.
-
-### `.userId`: String
-
-The players user id. This value is the same each time the player enters the world.
-
-### `.networkId`: String
-
-A unique ID that is given to every player each time they connect.
+The players unique ID. This is always the same for the same player, even when they leave and come back.
 
 ### `.name`: String
 
 The players name.
+
+### `.local`: Boolean
+
+Whether the player is local to this client.
+
+### `.admin`: Boolean
+
+Whether the player is an admin in this world.
 
 ### `.position`: Vector3
 

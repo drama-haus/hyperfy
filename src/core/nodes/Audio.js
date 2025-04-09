@@ -306,11 +306,13 @@ export class Audio extends Node {
     return !!this.source
   }
 
-  async play() {
+  async play(restartIfPlaying = false) {
+    if (!this.ctx.world) return // not mounted
     const loader = this.ctx.world.loader
     const audio = this.ctx.world.audio
     if (!audio) return
     if (!this._src) return
+    if (restartIfPlaying) this.stop()
     if (this.source) return
     const n = ++this.n
     let buffer
@@ -476,8 +478,8 @@ export class Audio extends Node {
         get isPlaying() {
           return self.isPlaying
         },
-        play() {
-          self.play()
+        play(restartIfPlaying) {
+          self.play(restartIfPlaying)
         },
         pause() {
           self.pause()

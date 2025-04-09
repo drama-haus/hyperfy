@@ -19,7 +19,7 @@ const POINTER_LOOK_SPEED = 0.1
 const PAN_LOOK_SPEED = 0.4
 const ZOOM_SPEED = 2
 const MIN_ZOOM = 2
-const MAX_ZOOM = 100 // 16
+const MAX_ZOOM = 8
 const STICK_MAX_DISTANCE = 50
 const DEFAULT_CAM_HEIGHT = 1.2
 
@@ -275,10 +275,11 @@ export class PlayerLocal extends Entity {
     this.control.camera.quaternion.copy(this.cam.quaternion)
     this.control.camera.zoom = this.cam.zoom
     // this.control.setActions([{ type: 'space', label: 'Jump / Double-Jump' }])
+    // this.control.setActions([{ type: 'escape', label: 'Menu' }])
   }
 
   toggleFlying() {
-    const canFly = hasRole(this.data.roles, 'admin', 'builder')
+    const canFly = this.world.settings.public || hasRole(this.data.roles, 'admin')
     if (!canFly) return
     this.flying = !this.flying
     if (this.flying) {
@@ -992,6 +993,12 @@ export class PlayerLocal extends Entity {
     }
     if (data.hasOwnProperty('roles')) {
       this.data.roles = data.roles
+      changed = true
+    }
+    if (data.hasOwnProperty('solana')) {
+      this.data.solana = data.solana
+      this.world.network.send('entityModified', { id: this.data.id, ...data })
+      this.world.events.emit('solana', { playerId: this.data.id })
       changed = true
     }
     if (avatarChanged) {

@@ -15,6 +15,9 @@ export class ClientPrefs extends System {
     const isQuest = /OculusBrowser/.test(navigator.userAgent)
     const isTouch = navigator.userAgent.match(/OculusBrowser|iPhone|iPad|iPod|Android/i)
 
+    this.ui = isNumber(data.ui) ? data.ui : 1
+    this.actions = isBoolean(data.actions) ? data.actions : true
+    this.stats = isBoolean(data.stats) ? data.stats : false
     this.dpr = isNumber(data.dpr) ? data.dpr : 1
     this.shadows = data.shadows ? data.shadows : isQuest ? 'low' : 'high' // none, low=1, med=2048cascade, high=4096cascade
     this.postprocessing = isBoolean(data.postprocessing) ? data.postprocessing : true
@@ -44,6 +47,9 @@ export class ClientPrefs extends System {
 
   persist() {
     storage.set('prefs', {
+      ui: this.ui,
+      actions: this.actions,
+      stats: this.stats,
       dpr: this.dpr,
       shadows: this.shadows,
       postprocessing: this.postprocessing,
@@ -52,6 +58,18 @@ export class ClientPrefs extends System {
       sfx: this.sfx,
       voice: this.voice,
     })
+  }
+
+  setUI(value) {
+    this.modify('ui', value)
+  }
+
+  setActions(value) {
+    this.modify('actions', value)
+  }
+
+  setStats(value) {
+    this.modify('stats', value)
   }
 
   setDPR(value) {

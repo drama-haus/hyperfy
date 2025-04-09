@@ -61,6 +61,7 @@ export class ClientEnvironment extends System {
   constructor(world) {
     super(world)
 
+    this.model = null
     this.skys = []
     this.sky = null
     this.skyN = 0
@@ -70,23 +71,24 @@ export class ClientEnvironment extends System {
 
   init({ baseEnvironment }) {
     this.base = baseEnvironment
-    console.log(this.base)
   }
 
   async start() {
     this.buildCSM()
     this.updateSky()
 
+    this.world.settings.on('change', this.onSettingsChange)
     this.world.prefs.on('change', this.onPrefsChange)
     this.world.graphics.on('resize', this.onViewportResize)
+  }
 
-    // TEMP: the following sets up a the base environment
-    // but eventually you'll do this with an environment app
-    if (this.base.model) {
-      const glb = await this.world.loader.load('model', this.base.model)
-      const root = glb.toNodes()
-      root.activate({ world: this.world, label: 'base' })
-    }
+  async updateModel() {
+    const url = this.world.settings.model?.url || this.base.model
+    let glb = this.world.loader.get('model', url)
+    if (!glb) glb = await this.world.loader.load('model', url)
+    if (this.model) this.model.deactivate()
+    this.model = glb.toNodes()
+    this.model.activate({ world: this.world, label: 'base' })
   }
 
   addSky(node) {
@@ -241,6 +243,12 @@ export class ClientEnvironment extends System {
           light.castShadow = false
         }
       }
+    }
+  }
+
+  onSettingsChange = changes => {
+    if (changes.model) {
+      this.updateModel()
     }
   }
 

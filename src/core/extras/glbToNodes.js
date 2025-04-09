@@ -1,4 +1,5 @@
 import { createNode } from './createNode'
+import CustomShaderMaterial from '../libs/three-custom-shader-material'
 
 const groupTypes = ['Scene', 'Group', 'Object3D']
 
@@ -10,8 +11,29 @@ export function glbToNodes(glb, world) {
   function parse(object3ds, parentNode) {
     for (const object3d of object3ds) {
       const props = object3d.userData || {}
+      const isSkinnedMeshRoot = !!object3d.children.find(c => c.isSkinnedMesh)
+      // SkinnedMesh (root)
+      if (isSkinnedMeshRoot) {
+        const node = registerNode('skinnedmesh', {
+          id: object3d.name,
+          object3d,
+          animations: glb.animations,
+          castShadow: props.castShadow,
+          receiveShadow: props.receiveShadow,
+          active: props.active,
+          position: object3d.position.toArray(),
+          quaternion: object3d.quaternion.toArray(),
+          scale: object3d.scale.toArray(),
+        })
+        if (parentNode.name === 'lod' && props.maxDistance) {
+          parentNode.insert(node, props.maxDistance)
+        } else {
+          parentNode.add(node)
+        }
+        // parse(object3d.children, node)
+      }
       // Snap (custom node)
-      if (props.node === 'snap') {
+      else if (props.node === 'snap') {
         const node = registerNode('snap', {
           id: object3d.name,
           position: object3d.position.toArray(),
@@ -67,7 +89,7 @@ export function glbToNodes(glb, world) {
       // Mesh
       else if (object3d.type === 'Mesh') {
         // wind effect
-        if (props.wind) {
+        if (object3d.material.userData.wind) {
           addWind(object3d, world)
         }
         const hasMorphTargets = object3d.morphTargetDictionary || object3d.morphTargetInfluences?.length > 0
@@ -94,7 +116,7 @@ export function glbToNodes(glb, world) {
       }
       // SkinnedMesh
       else if (object3d.type === 'SkinnedMesh') {
-        // TODO
+        // ...
       }
       // Object3D / Group / Scene
       else if (groupTypes.includes(object3d.type)) {
@@ -118,8 +140,14 @@ export function glbToNodes(glb, world) {
 }
 
 function addWind(mesh, world) {
+  if (!world.wind) return
   const uniforms = world.wind.uniforms
+  if (mesh.material.hasWind) return
+  mesh.material.hasWind = true
+  // console.log('added wind to', mesh.name)
   mesh.material.onBeforeCompile = shader => {
+    if (!shader.defines) shader.defines = {}
+    shader.defines.USE_WIND = 1
     shader.uniforms.time = uniforms.time
     shader.uniforms.strength = uniforms.strength
     shader.uniforms.direction = uniforms.direction
@@ -133,6 +161,12 @@ function addWind(mesh, world) {
     shader.uniforms.height = { value: height } // prettier-ignore
     shader.uniforms.stiffness = { value: 0 }
 
+    // BUG: somehow the wind shader code below is added to other meshes
+    // so we wrap it in an ifdef. this might be a bug with CSM because disabling
+    // the prepareMaterial in Stage.js the issues goes away
+    // tbh the wind code should probably be part
+    // of the global shader anyway, same with things like outlines etc.
+
     shader.vertexShader = shader.vertexShader.replace(
       '#include <common>',
       `
@@ -143,7 +177,7 @@ function addWind(mesh, world) {
       uniform float noiseScale;
       uniform float ampScale;
       uniform float freqMultiplier;
-      
+
       uniform float height;
       uniform float stiffness;
 
@@ -158,16 +192,18 @@ function addWind(mesh, world) {
       `
       #include <begin_vertex>
 
-      vec4 worldPos = vec4(position, 1.0);
-      #ifdef USE_INSTANCING
-        worldPos = instanceMatrix * worldPos;
-      #endif
-      worldPos = modelMatrix * worldPos;
+      #ifdef USE_WIND
+        vec4 worldPos = vec4(position, 1.0);
+        #ifdef USE_INSTANCING
+          worldPos = instanceMatrix * worldPos;
+        #endif
+        worldPos = modelMatrix * worldPos;
 
-      float heightFactor = position.y / height;
-      float noiseFactor = snoise(worldPos.xyz * noiseScale + time * speed);
-      vec3 displacement = sin(time * freqMultiplier + worldPos.xyz) * noiseFactor * ampScale * heightFactor * (1.0 - stiffness);
-      transformed += strength * displacement * direction;
+        float heightFactor = position.y / height;
+        float noiseFactor = snoise(worldPos.xyz * noiseScale + time * speed);
+        vec3 displacement = sin(time * freqMultiplier + worldPos.xyz) * noiseFactor * ampScale * heightFactor * (1.0 - stiffness);
+        transformed += strength * displacement * direction;
+      #endif
       `
     )
   }

@@ -81,7 +81,14 @@ export class PlayerRemote extends Entity {
     this.teleport = 0
 
     this.world.setHot(this, true)
-    this.world.events.emit('enter', { playerId: this.data.id })
+
+    // on the client remote players emit enter events here.
+    // but on the server, enter events is delayed for players entering until after their snapshot is sent
+    // that way they can actually respond correctly to follow-through events.
+    // see ServerNetwork.js -> onConnection
+    if (this.world.network.isClient) {
+      this.world.events.emit('enter', { playerId: this.data.id })
+    }
   }
 
   applyAvatar() {
@@ -185,6 +192,10 @@ export class PlayerRemote extends Entity {
     if (data.hasOwnProperty('roles')) {
       this.data.roles = data.roles
     }
+    if (data.hasOwnProperty('solana')) {
+      this.data.solana = data.solana
+      this.world.events.emit('solana', { playerId: this.data.id })
+    }
     if (avatarChanged) {
       this.applyAvatar()
     }
@@ -202,8 +213,8 @@ export class PlayerRemote extends Entity {
   }
 
   destroy(local) {
-    if (this.dead) return
-    this.dead = true
+    if (this.destroyed) return
+    this.destroyed = true
 
     clearTimeout(this.chatTimer)
     this.base.deactivate()

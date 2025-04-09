@@ -4,7 +4,7 @@ import { Socket } from '../Socket'
 import { addRole, hasRole, removeRole, serializeRoles, uuid } from '../utils'
 import { System } from './System'
 import { createJWT, readJWT } from '../utils-server'
-import { cloneDeep } from 'lodash-es'
+import { cloneDeep, isNumber } from 'lodash-es'
 import * as THREE from '../extras/three'
 
 const SAVE_INTERVAL = parseInt(process.env.SAVE_INTERVAL || '60') // seconds
@@ -55,10 +55,22 @@ export class ServerNetwork extends System {
       data.state = {}
       this.world.entities.add(data, true)
     }
+    // hydrate settings
+    let settingsRow = await this.db('config').where('key', 'settings').first()
+    try {
+      const settings = JSON.parse(settingsRow?.value || '{}')
+      this.world.settings.deserialize(settings)
+    } catch (err) {
+      console.error(err)
+    }
+    // watch settings changes
+    this.world.settings.on('change', this.saveSettings)
     // queue first save
     if (SAVE_INTERVAL) {
       this.saveTimerId = setTimeout(this.save, SAVE_INTERVAL * 1000)
     }
+    // load environment model
+    await this.world.environment.updateModel()
   }
 
   preFixedUpdate() {
@@ -180,8 +192,39 @@ export class ServerNetwork extends System {
     this.saveTimerId = setTimeout(this.save, SAVE_INTERVAL * 1000)
   }
 
+  saveSettings = async () => {
+    const data = this.world.settings.serialize()
+    const value = JSON.stringify(data)
+    await this.db('config')
+      .insert({
+        key: 'settings',
+        value,
+      })
+      .onConflict('key')
+      .merge({
+        value,
+      })
+  }
+
+  isAdmin(player) {
+    return hasRole(player.data.roles, 'admin')
+  }
+
+  isBuilder(player) {
+    return this.world.settings.public || this.isAdmin(player)
+  }
+
   async onConnection(ws, authToken) {
     try {
+      // check player limit
+      const playerLimit = this.world.settings.playerLimit
+      if (isNumber(playerLimit) && playerLimit > 0 && this.sockets.size >= playerLimit) {
+        const packet = writePacket('kick', 'player_limit')
+        ws.send(packet)
+        ws.disconnect()
+        return
+      }
+
       // get or create user
       let user
       if (authToken) {
@@ -205,6 +248,14 @@ export class ServerNetwork extends System {
       }
       user.roles = user.roles.split(',')
 
+      // disconnect if user already in this world
+      if (this.sockets.has(user.id)) {
+        const packet = writePacket('kick', 'duplicate_user')
+        ws.send(packet)
+        ws.disconnect()
+        return
+      }
+
       // if there is no admin code, everyone is a temporary admin (eg for local dev)
       // all roles prefixed with `~` are temporary and not persisted to db
       if (!process.env.ADMIN_CODE) {
@@ -212,20 +263,20 @@ export class ServerNetwork extends System {
       }
 
       // create socket
-      const socket = new Socket({ ws, network: this })
+      const socket = new Socket({ id: user.id, ws, network: this })
 
       // spawn player
       socket.player = this.world.entities.add(
         {
-          id: uuid(),
+          id: user.id,
           type: 'player',
           position: this.spawn.position.slice(),
           quaternion: this.spawn.quaternion.slice(),
-          owner: socket.id,
-          userId: user.id,
+          owner: socket.id, // deprecated, same as userId
+          userId: user.id, // deprecated, same as userId
           name: user.name,
           health: HEALTH_MAX,
-          avatar: user.avatar,
+          avatar: user.avatar || this.world.settings.avatar?.url || 'asset://avatar.vrm',
           roles: user.roles,
         },
         true
@@ -238,6 +289,7 @@ export class ServerNetwork extends System {
         assetsUrl: process.env.PUBLIC_ASSETS_URL,
         apiUrl: process.env.PUBLIC_API_URL,
         maxUploadSize: process.env.PUBLIC_MAX_UPLOAD_SIZE,
+        settings: this.world.settings.serialize(),
         chat: this.world.chat.serialize(),
         blueprints: this.world.blueprints.serialize(),
         entities: this.world.entities.serialize(),
@@ -245,21 +297,30 @@ export class ServerNetwork extends System {
       })
 
       this.sockets.set(socket.id, socket)
+
+      // enter events on the server are sent after the snapshot.
+      // on the client these are sent during PlayerRemote.js entity instantiation!
+      this.world.events.emit('enter', { playerId: socket.player.data.id })
     } catch (err) {
       console.error(err)
     }
   }
 
   onChatAdded = async (socket, msg) => {
+    this.world.chat.add(msg, false)
+    this.send('chatAdded', msg, socket.id)
+  }
+
+  onCommand = async (socket, args) => {
     // TODO: check for spoofed messages, permissions/roles etc
     // handle slash commands
-    if (msg.body.startsWith('/')) {
-      const [cmd, arg1, arg2] = msg.body.slice(1).split(' ')
-      // become admin command
-      if (cmd === 'admin') {
-        const code = arg1
-        if (code !== process.env.ADMIN_CODE || !process.env.ADMIN_CODE) return
-        const player = socket.player
+    const player = socket.player
+    const playerId = player.data.id
+    const [cmd, arg1, arg2] = args
+    // become admin command
+    if (cmd === 'admin') {
+      const code = arg1
+      if (process.env.ADMIN_CODE && process.env.ADMIN_CODE === code) {
         const id = player.data.id
         const userId = player.data.userId
         const roles = player.data.roles
@@ -282,10 +343,10 @@ export class ServerNetwork extends System {
           .where('id', userId)
           .update({ roles: serializeRoles(roles) })
       }
-      if (cmd === 'name') {
-        const name = arg1
-        if (!name) return
-        const player = socket.player
+    }
+    if (cmd === 'name') {
+      const name = arg1
+      if (name) {
         const id = player.data.id
         const userId = player.data.userId
         player.data.name = name
@@ -300,53 +361,36 @@ export class ServerNetwork extends System {
         })
         await this.db('users').where('id', userId).update({ name })
       }
-      if (cmd === 'spawn') {
-        const player = socket.player
-        const roles = player.data.roles
-        if (!hasRole(roles, 'admin')) return
-        const action = arg1
-        if (action === 'set') {
-          this.spawn = { position: player.data.position.slice(), quaternion: player.data.quaternion.slice() }
-        } else if (action === 'clear') {
-          this.spawn = { position: [0, 0, 0], quaternion: [0, 0, 0, 1] }
-        } else {
-          return
-        }
-        const data = JSON.stringify(this.spawn)
-        await this.db('config')
-          .insert({
-            key: 'spawn',
-            value: data,
-          })
-          .onConflict('key')
-          .merge({
-            value: data,
-          })
-      }
-      if (cmd === 'chat') {
-        const code = arg1
-        if (code !== 'clear') return
-        const player = socket.player
-        if (!hasRole(player.data.roles, 'admin')) {
-          return
-        }
-        this.world.chat.clear(true)
-        return
-      }
-      return
     }
-    // handle chat messages
-    this.world.chat.add(msg, false)
-    this.send('chatAdded', msg, socket.id)
+    if (cmd === 'spawn') {
+      const op = arg1
+      this.onSpawnModified(socket, op)
+    }
+    if (cmd === 'chat') {
+      const op = arg1
+      if (op === 'clear' && this.isBuilder(socket.player)) {
+        this.world.chat.clear(true)
+      }
+    }
+    // emit event for all except admin
+    if (cmd !== 'admin') {
+      this.world.events.emit('command', { playerId, args })
+    }
   }
 
   onBlueprintAdded = (socket, blueprint) => {
+    if (!this.isBuilder(socket.player)) {
+      return console.error('player attempted to add blueprint without builder permission')
+    }
     this.world.blueprints.add(blueprint)
     this.send('blueprintAdded', blueprint, socket.id)
     this.dirtyBlueprints.add(blueprint.id)
   }
 
   onBlueprintModified = (socket, data) => {
+    if (!this.isBuilder(socket.player)) {
+      return console.error('player attempted to modify blueprint without builder permission')
+    }
     const blueprint = this.world.blueprints.get(data.id)
     // if new version is greater than current version, allow it
     if (data.version > blueprint.version) {
@@ -361,14 +405,15 @@ export class ServerNetwork extends System {
   }
 
   onEntityAdded = (socket, data) => {
-    // TODO: check client permission
+    if (!this.isBuilder(socket.player)) {
+      return console.error('player attempted to add entity without builder permission')
+    }
     const entity = this.world.entities.add(data)
     this.send('entityAdded', data, socket.id)
     if (entity.isApp) this.dirtyApps.add(entity.data.id)
   }
 
   onEntityModified = async (socket, data) => {
-    // TODO: check client permission
     const entity = this.world.entities.get(data.id)
     if (!entity) return console.error('onEntityModified: no entity found', data)
     entity.modify(data)
@@ -402,11 +447,50 @@ export class ServerNetwork extends System {
   }
 
   onEntityRemoved = (socket, id) => {
-    // TODO: check client permission
+    if (!this.isBuilder(socket.player))
+      return console.error('player attempted to remove entity without builder permission')
     const entity = this.world.entities.get(id)
     this.world.entities.remove(id)
     this.send('entityRemoved', id, socket.id)
     if (entity.isApp) this.dirtyApps.add(id)
+  }
+
+  onSettingsModified = (socket, data) => {
+    if (!this.isBuilder(socket.player))
+      return console.error('player attempted to modify settings without builder permission')
+    this.world.settings.set(data.key, data.value)
+    this.send('settingsModified', data, socket.id)
+  }
+
+  onSpawnModified = async (socket, op) => {
+    if (!this.isBuilder(socket.player)) {
+      return console.error('player attempted to modify spawn without builder permission')
+    }
+    const player = socket.player
+    if (op === 'set') {
+      this.spawn = { position: player.data.position.slice(), quaternion: player.data.quaternion.slice() }
+    } else if (op === 'clear') {
+      this.spawn = { position: [0, 0, 0], quaternion: [0, 0, 0, 1] }
+    } else {
+      return
+    }
+    const data = JSON.stringify(this.spawn)
+    await this.db('config')
+      .insert({
+        key: 'spawn',
+        value: data,
+      })
+      .onConflict('key')
+      .merge({
+        value: data,
+      })
+    socket.send('chatAdded', {
+      id: uuid(),
+      from: null,
+      fromId: null,
+      body: op === 'set' ? 'Spawn updated' : 'Spawn cleared',
+      createdAt: moment().toISOString(),
+    })
   }
 
   onPlayerTeleport = (socket, data) => {
@@ -421,8 +505,52 @@ export class ServerNetwork extends System {
     this.sendTo(data.networkId, 'playerSessionAvatar', data.avatar)
   }
 
+  onPing = (socket, time) => {
+    socket.send('pong', time)
+  }
+
   onDisconnect = (socket, code) => {
     socket.player.destroy(true)
     this.sockets.delete(socket.id)
+  }
+
+  onRequestTokenMetadata = async (socket, tokenMint) => {
+    try {
+      console.log(`Received token metadata request for: ${tokenMint} from socket ${socket.id}`)
+
+      // Get the Solana system
+      const solana = this.world.solana
+      if (!solana) {
+        console.error('Solana system not initialized')
+        return
+      }
+
+      // Get token metadata from the server's Solana system
+      const token = await solana.programs.token(tokenMint)
+
+      if (!token) {
+        console.error(`Token metadata not found for: ${tokenMint}`)
+        return
+      }
+
+      // Extract just the metadata properties
+      const metadata = {
+        decimals: token.decimals,
+        supply: token.supply,
+        name: token.name,
+        symbol: token.symbol,
+        uri: token.uri,
+      }
+
+      // Send metadata back to the client
+      this.sendTo(socket.id, 'tokenMetadata', {
+        tokenMint,
+        metadata,
+      })
+
+      console.log(`Sent metadata for token: ${tokenMint} to socket ${socket.id}`)
+    } catch (error) {
+      console.error(`Error processing token metadata request for ${tokenMint}:`, error)
+    }
   }
 }

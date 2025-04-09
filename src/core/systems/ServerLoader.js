@@ -1,7 +1,8 @@
 import fs from 'fs-extra'
 import path from 'path'
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js'
-import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
+// import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
+import { GLTFLoader } from '../libs/gltfloader/GLTFLoader.js'
 // import { VRMLoaderPlugin } from '@pixiv/three-vrm'
 
 import { System } from './System'
@@ -60,6 +61,9 @@ export class ServerLoader extends System {
       // promise = this.rgbeLoader.loadAsync(url).then(texture => {
       //   return texture
       // })
+    }
+    if (type === 'image') {
+      // ...
     }
     if (type === 'texture') {
       // ...

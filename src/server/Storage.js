@@ -1,5 +1,5 @@
 import fs from 'fs-extra'
-import { throttle } from 'lodash-es'
+import { cloneDeep, throttle } from 'lodash-es'
 
 export class Storage {
   constructor(file) {
@@ -17,9 +17,13 @@ export class Storage {
   }
 
   set(key, value) {
-    if (this.data[key] === value) return
-    this.data[key] = value
-    this.save()
+    try {
+      value = JSON.parse(JSON.stringify(value))
+      this.data[key] = value
+      this.save()
+    } catch (err) {
+      console.error(err)
+    }
   }
 
   async persist() {
@@ -27,8 +31,8 @@ export class Storage {
     try {
       await fs.writeJson(this.file, this.data)
     } catch (err) {
-      console.log('failed to persist storage')
       console.error(err)
+      console.log('failed to persist storage')
     }
     // console.timeEnd('[storage] persist')
   }

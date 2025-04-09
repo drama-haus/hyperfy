@@ -18,6 +18,9 @@ export const initYoga = () => {
   JustifyContent['flex-start'] = Yoga.JUSTIFY_FLEX_START
   JustifyContent['flex-end'] = Yoga.JUSTIFY_FLEX_END
   JustifyContent['center'] = Yoga.JUSTIFY_CENTER
+  JustifyContent['space-between'] = Yoga.JUSTIFY_SPACE_BETWEEN
+  JustifyContent['space-around'] = Yoga.JUSTIFY_SPACE_AROUND
+  JustifyContent['space-evenly'] = Yoga.JUSTIFY_SPACE_EVENLY
   AlignItems['stretch'] = Yoga.ALIGN_STRETCH
   AlignItems['flex-start'] = Yoga.ALIGN_FLEX_START
   AlignItems['flex-end'] = Yoga.ALIGN_FLEX_END
@@ -47,7 +50,7 @@ export function isFlexDirection(value) {
   return flexDirections.includes(value)
 }
 
-const justifyContents = ['flex-start', 'flex-end', 'center']
+const justifyContents = ['flex-start', 'flex-end', 'center', 'space-between', 'space-around', 'space-evenly']
 
 export function isJustifyContent(value) {
   return justifyContents.includes(value)

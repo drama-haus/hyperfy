@@ -786,6 +786,8 @@ const fieldTypes = {
   switch: FieldSwitch,
   dropdown: FieldDropdown,
   range: FieldRange,
+  button: FieldButton,
+  buttons: FieldButtons,
 }
 
 function Field({ world, props, field, value, modify }) {
@@ -868,6 +870,7 @@ function FieldNumber({ world, field, value, modify }) {
   return (
     <FieldWithLabel label={field.label}>
       <InputNumber
+        placeholder={field.placeholder}
         value={value}
         onChange={value => modify(field.key, value)}
         dp={field.dp}
@@ -915,6 +918,65 @@ function FieldDropdown({ world, field, value, modify }) {
   return (
     <FieldWithLabel label={field.label}>
       <InputDropdown options={field.options} value={value} onChange={value => modify(field.key, value)} />
+    </FieldWithLabel>
+  )
+}
+
+function FieldButton({ world, field, value, modify }) {
+  return (
+    <FieldWithLabel label={''}>
+      <div
+        css={css`
+          background: #252630;
+          border-radius: 10px;
+          height: 34px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 14px;
+          &:hover {
+            cursor: pointer;
+            background: #30323e;
+          }
+        `}
+        onClick={field.onClick}
+      >
+        <span>{field.label}</span>
+      </div>
+    </FieldWithLabel>
+  )
+}
+
+function FieldButtons({ world, field, value, modify }) {
+  return (
+    <FieldWithLabel label={field.label}>
+      <div
+        css={css`
+          height: 34px;
+          display: flex;
+          gap: 5px;
+          .fieldbuttons-button {
+            flex: 1;
+            background: #252630;
+            border-radius: 10px;
+            height: 34px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            &:hover {
+              cursor: pointer;
+              background: #30323e;
+            }
+          }
+        `}
+      >
+        {field.buttons.map(button => (
+          <div key={button.label} className='fieldbuttons-button' onClick={button.onClick}>
+            <span>{button.label}</span>
+          </div>
+        ))}
+      </div>
     </FieldWithLabel>
   )
 }

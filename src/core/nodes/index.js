@@ -1,5 +1,6 @@
 export { Group as group } from './Group.js'
 export { Mesh as mesh } from './Mesh.js'
+export { SkinnedMesh as skinnedmesh } from './SkinnedMesh.js'
 export { LOD as lod } from './LOD.js'
 export { Audio as audio } from './Audio.js'
 export { Snap as snap } from './Snap.js'

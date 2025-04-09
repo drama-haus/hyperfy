@@ -1,10 +1,10 @@
 import { getRef } from '../nodes/Node'
-import { clamp, uuid } from '../utils'
+import { clamp, hasRole, uuid } from '../utils'
 import * as THREE from './three'
 
 const HEALTH_MAX = 100
 
-export function createPlayerProxy(player) {
+export function createPlayerProxy(entity, player) {
   const world = player.world
   const position = new THREE.Vector3()
   const rotation = new THREE.Euler()
@@ -19,6 +19,16 @@ export function createPlayerProxy(player) {
     },
     get userId() {
       return player.data.userId
+    },
+    get local() {
+      return player.data.id === world.network.id
+    },
+    get admin() {
+      return hasRole(player.data.roles, 'admin')
+    },
+    get isAdmin() {
+      // deprecated, use .admin
+      return hasRole(player.data.roles, 'admin')
     },
     get name() {
       return player.data.name
@@ -37,6 +47,15 @@ export function createPlayerProxy(player) {
     },
     get height() {
       return player.avatar?.getHeight()
+    },
+    get headToHeight() {
+      return player.avatar?.getHeadToHeight()
+    },
+    get destroyed() {
+      return !!player.destroyed
+    },
+    get solana() {
+      return player.data.solana
     },
     teleport(position, rotationY) {
       if (player.data.owner === world.network.id) {

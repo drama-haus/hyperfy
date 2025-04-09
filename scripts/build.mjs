@@ -4,6 +4,7 @@ import path from 'path'
 import { fork, execSync } from 'child_process'
 import * as esbuild from 'esbuild'
 import { fileURLToPath } from 'url'
+import { polyfillNode } from 'esbuild-plugin-polyfill-node'
 
 const dev = process.argv.includes('--dev')
 const dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -23,7 +24,7 @@ const clientHtmlDest = path.join(rootDir, 'build/public/index.html')
 
 {
   const clientCtx = await esbuild.context({
-    entryPoints: ['src/client/index.js'],
+    entryPoints: ['src/client/index.js', 'src/client/components/WalletProvider.js'],
     entryNames: '/[name]-[hash]',
     outdir: clientBuildDir,
     platform: 'browser',
@@ -45,6 +46,7 @@ const clientHtmlDest = path.join(rootDir, 'build/public/index.html')
       react: 'react', // always use our own local react (jsx)
     },
     plugins: [
+      polyfillNode({}),
       {
         name: 'client-finalize-plugin',
         setup(build) {

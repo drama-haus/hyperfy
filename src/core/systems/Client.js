@@ -27,6 +27,14 @@ export class Client extends System {
   start() {
     this.world.graphics.renderer.setAnimationLoop(this.world.tick)
     document.addEventListener('visibilitychange', this.onVisibilityChange)
+
+    this.world.settings.on('change', this.onSettingsChange)
+  }
+
+  onSettingsChange = changes => {
+    if (changes.title) {
+      document.title = changes.title.value || 'World'
+    }
   }
 
   onVisibilityChange = () => {

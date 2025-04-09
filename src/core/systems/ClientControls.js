@@ -242,7 +242,7 @@ export class ClientControls extends System {
     // - 0 is lowest priority generally for player controls
     // - apps use higher priority
     // - global systems use highest priority over everything
-    const idx = this.controls.findIndex(c => c.options.priority < options.priority)
+    const idx = this.controls.findIndex(c => c.options.priority <= options.priority)
     if (idx === -1) {
       this.controls.push(control)
     } else {
@@ -295,9 +295,11 @@ export class ClientControls extends System {
       const actions = control.actions
       if (actions) {
         for (const action of actions) {
-          // ignore if existing
-          const idx = this.actions.findIndex(a => a.type === action.type)
-          if (idx !== -1) continue
+          // ignore if already existing
+          if (!action.type === 'custom') {
+            const idx = this.actions.findIndex(a => a.type === action.type)
+            if (idx !== -1) continue
+          }
           this.actions.push(action)
         }
       }
@@ -488,6 +490,7 @@ export class ClientControls extends System {
   }
 
   onTouchStart = e => {
+    if (e.isCoreUI) return
     e.preventDefault()
     for (let i = 0; i < e.changedTouches.length; i++) {
       const touch = e.changedTouches[i]
@@ -506,6 +509,7 @@ export class ClientControls extends System {
   }
 
   onTouchMove = e => {
+    if (e.isCoreUI) return
     for (let i = 0; i < e.changedTouches.length; i++) {
       const touch = e.changedTouches[i]
       const info = this.touches.get(touch.identifier)
@@ -521,6 +525,7 @@ export class ClientControls extends System {
   }
 
   onTouchEnd = e => {
+    if (e.isCoreUI) return
     for (let i = 0; i < e.changedTouches.length; i++) {
       const touch = e.changedTouches[i]
       const info = this.touches.get(touch.identifier)

@@ -288,7 +288,7 @@ export const propToLabel = {
   space: 'Space',
   backspace: 'Backspace',
   delete: 'Delete',
-  escape: 'Escape',
+  escape: 'Esc',
   mouseLeft: 'LMB',
   mouseRight: 'RMB',
   metaLeft: 'Cmd',

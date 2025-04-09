@@ -70,8 +70,15 @@ export class ClientLoader extends System {
     this.files.set(url, file)
   }
 
-  getFile(url) {
+  getFile(url, name) {
     url = this.world.resolveURL(url)
+    if (name) {
+      const file = this.files.get(url)
+      return new File([file], name, {
+        type: file.type, // Preserve the MIME type
+        lastModified: file.lastModified, // Preserve the last modified timestamp
+      })
+    }
     return this.files.get(url)
   }
 
@@ -110,6 +117,17 @@ export class ClientLoader extends System {
         texture.needsUpdate = true
         this.results.set(key, texture)
         return texture
+      }
+      if (type === 'image') {
+        return new Promise(resolve => {
+          const img = new Image()
+          img.onload = () => {
+            this.results.set(key, img)
+            resolve(img)
+            // URL.revokeObjectURL(img.src)
+          }
+          img.src = URL.createObjectURL(file)
+        })
       }
       if (type === 'texture') {
         return new Promise(resolve => {
@@ -206,6 +224,16 @@ export class ClientLoader extends System {
       promise = this.rgbeLoader.loadAsync(localUrl).then(texture => {
         this.results.set(key, texture)
         return texture
+      })
+    }
+    if (type === 'image') {
+      promise = new Promise(resolve => {
+        const img = new Image()
+        img.onload = () => {
+          this.results.set(key, img)
+          resolve(img)
+        }
+        img.src = localUrl
       })
     }
     if (type === 'texture') {

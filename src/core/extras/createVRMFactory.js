@@ -105,11 +105,12 @@ export function createVRMFactory(glb, setupMaterial) {
     create,
     applyStats(stats) {
       glb.scene.traverse(obj => {
-        if (obj.geometry && !stats.geometries.has(obj.geometry)) {
+        if (obj.geometry && !stats.geometries.has(obj.geometry.uuid)) {
           stats.geometries.add(obj.geometry.uuid)
           stats.triangles += getTrianglesFromGeometry(obj.geometry)
         }
-        if (obj.material) {
+        if (obj.material && !stats.materials.has(obj.material.uuid)) {
+          stats.materials.add(obj.material.uuid)
           stats.textureBytes += getTextureBytesFromMaterial(obj.material)
         }
       })
@@ -206,7 +207,10 @@ export function createVRMFactory(glb, setupMaterial) {
         currentEmote = null
       }
       if (!url) return
-      const loop = !url.includes('l=0')
+      const opts = getQueryParams(url)
+      const loop = opts.l !== '0'
+      const speed = parseFloat(opts.s || 1)
+
       if (emotes[url]) {
         currentEmote = emotes[url]
         if (currentEmote.action) {
@@ -229,6 +233,7 @@ export function createVRMFactory(glb, setupMaterial) {
             getBoneName,
           })
           const action = mixer.clipAction(clip)
+          action.timeScale = speed
           emote.action = action
           // if its still this emote, play it!
           if (currentEmote === emote) {
@@ -313,4 +318,17 @@ function createCapsule(radius, height) {
   const geometry = new THREE.CapsuleGeometry(radius, height)
   geometry.translate(0, fullHeight / 2, 0)
   return geometry
+}
+
+let queryParams = {}
+function getQueryParams(url) {
+  if (!queryParams[url]) {
+    url = new URL(url)
+    const params = {}
+    for (const [key, value] of url.searchParams.entries()) {
+      params[key] = value
+    }
+    queryParams[url] = params
+  }
+  return queryParams[url]
 }

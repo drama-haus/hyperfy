@@ -1,14 +1,21 @@
 import * as THREE from '../extras/three'
-import { isNumber, isBoolean } from 'lodash-es'
+import { isNumber, isBoolean, isString, isFunction } from 'lodash-es'
 
 import { DEG2RAD } from '../extras/general'
 
 import { Node } from './Node'
+import { Layers } from '../extras/Layers'
+
+const layers = ['environment', 'prop', 'player', 'tool']
 
 const defaults = {
   radius: 0.4,
   height: 1,
   visible: false,
+  layer: 'environment',
+  tag: null,
+  onContactStart: null,
+  onContactEnd: null,
 }
 
 export class Controller extends Node {
@@ -19,6 +26,10 @@ export class Controller extends Node {
     this.radius = data.radius
     this.height = data.height
     this.visible = data.visible
+    this.layer = data.layer
+    this.tag = data.tag
+    this.onContactStart = data.onContactStart
+    this.onContactEnd = data.onContactEnd
   }
 
   mount() {
@@ -50,6 +61,42 @@ export class Controller extends Node {
     PHYSX.destroy(desc)
     const worldPosition = this.getWorldPosition()
     this.controller.setFootPosition(worldPosition.toPxExtVec3())
+
+    const actor = this.controller.getActor()
+    const nbShapes = actor.getNbShapes()
+    const shapeBuffer = new PHYSX.PxArray_PxShapePtr(nbShapes)
+    const shapesCount = actor.getShapes(shapeBuffer.begin(), nbShapes, 0)
+    for (let i = 0; i < shapesCount; i++) {
+      const shape = shapeBuffer.get(i)
+      const layer = Layers[this._layer]
+      let pairFlags =
+        PHYSX.PxPairFlagEnum.eNOTIFY_TOUCH_FOUND |
+        PHYSX.PxPairFlagEnum.eNOTIFY_TOUCH_LOST |
+        PHYSX.PxPairFlagEnum.eNOTIFY_CONTACT_POINTS
+      const filterData = new PHYSX.PxFilterData(layer.group, layer.mask, pairFlags, 0)
+      const shapeFlags = new PHYSX.PxShapeFlags()
+      shapeFlags.raise(PHYSX.PxShapeFlagEnum.eSCENE_QUERY_SHAPE | PHYSX.PxShapeFlagEnum.eSIMULATION_SHAPE)
+      shape.setFlags(shapeFlags)
+      shape.setQueryFilterData(filterData)
+      shape.setSimulationFilterData(filterData)
+    }
+    const self = this
+    this.actorHandle = this.ctx.world.physics.addActor(actor, {
+      controller: true,
+      node: self,
+      get tag() {
+        return self._tag
+      },
+      playerId: null,
+      get onContactStart() {
+        return self._onContactStart
+      },
+      get onContactEnd() {
+        return self._onContactEnd
+      },
+      onTriggerEnter: null,
+      onTriggerLeave: null,
+    })
   }
 
   commit(didMove) {
@@ -74,10 +121,10 @@ export class Controller extends Node {
     if (this.mesh) {
       this.ctx.world.graphics.scene.remove(this.mesh)
     }
-    if (this.controller) {
-      this.controller.release()
-      this.controller = null
-    }
+    this.actorHandle?.destroy()
+    this.actorHandle = null
+    this.controller?.release()
+    this.controller = null
   }
 
   copy(source, recursive) {
@@ -85,6 +132,10 @@ export class Controller extends Node {
     this._radius = source._radius
     this._height = source._height
     this._visible = source._visible
+    this._layer = source._layer
+    this._tag = source._tag
+    this._onContactStart = source._onContactStart
+    this._onContactEnd = source._onContactEnd
     return this
   }
 
@@ -120,11 +171,63 @@ export class Controller extends Node {
 
   set visible(value = defaults.visible) {
     if (!isBoolean(value)) {
-      throw new Error('[collider] visible not a boolean')
+      throw new Error('[controller] visible not a boolean')
     }
     this._visible = value
     this.needsRebuild = true
     this.setDirty()
+  }
+
+  get layer() {
+    return this._layer
+  }
+
+  set layer(value = defaults.layer) {
+    if (!isLayer(value)) {
+      throw new Error(`[controller] invalid layer: ${value}`)
+    }
+    this._layer = value
+    if (this.controller) {
+      // TODO: we could just update the PxFilterData tbh
+      this.needsRebuild = true
+      this.setDirty()
+    }
+  }
+
+  get tag() {
+    return this._tag
+  }
+
+  set tag(value = defaults.tag) {
+    if (isNumber(value)) {
+      value = value + ''
+    }
+    if (value !== null && !isString(value)) {
+      throw new Error('[controller] tag not a string')
+    }
+    this._tag = value
+  }
+
+  get onContactStart() {
+    return this._onContactStart
+  }
+
+  set onContactStart(value = defaults.onContactStart) {
+    if (value !== null && !isFunction(value)) {
+      throw new Error('[controller] onContactStart not a function')
+    }
+    this._onContactStart = value
+  }
+
+  get onContactEnd() {
+    return this._onContactEnd
+  }
+
+  set onContactEnd(value = defaults.onContactEnd) {
+    if (value !== null && !isFunction(value)) {
+      throw new Error('[controller] onContactEnd not a function')
+    }
+    this._onContactEnd = value
   }
 
   get isGrounded() {
@@ -147,6 +250,7 @@ export class Controller extends Node {
     if (!vec3?.isVector3) {
       throw new Error('[controller] move expected Vector3')
     }
+    if (!this.controller) return
     this.moveFlags = this.controller.move(vec3.toPxVec3(), 0, 1 / 60, this.ctx.world.physics.controllerFilters)
     // this.isGrounded = moveFlags.isSet(PHYSX.PxControllerCollisionFlagEnum.eCOLLISION_DOWN) // prettier-ignore
     const pos = this.controller.getFootPosition()
@@ -176,6 +280,33 @@ export class Controller extends Node {
         set visible(value) {
           self.visible = value
         },
+        get layer() {
+          return self.layer
+        },
+        set layer(value) {
+          if (value === 'player') {
+            throw new Error('[controller] layer invalid: player')
+          }
+          self.layer = value
+        },
+        get tag() {
+          return self.tag
+        },
+        set tag(value) {
+          self.tag = value
+        },
+        get onContactStart() {
+          return self.onContactStart
+        },
+        set onContactStart(value) {
+          self.onContactStart = value
+        },
+        get onContactEnd() {
+          return self.onContactEnd
+        },
+        set onContactEnd(value) {
+          self.onContactEnd = value
+        },
         get isGrounded() {
           return self.isGrounded
         },
@@ -194,4 +325,8 @@ export class Controller extends Node {
     }
     return this.proxy
   }
+}
+
+function isLayer(value) {
+  return layers.includes(value)
 }
