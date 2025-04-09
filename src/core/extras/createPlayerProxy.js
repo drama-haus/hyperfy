@@ -54,6 +54,9 @@ export function createPlayerProxy(entity, player) {
     get destroyed() {
       return !!player.destroyed
     },
+    get solana() {
+      return player.data.solana
+    },
     teleport(position, rotationY) {
       if (player.data.owner === world.network.id) {
         // if player is local we can set directly
