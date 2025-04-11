@@ -2,6 +2,7 @@ import 'ses'
 import '../core/lockdown'
 import { createRoot } from 'react-dom/client'
 
+import { Providers } from './components/Providers'
 import { Client } from './world-client'
 
 function App() {
@@ -9,4 +10,8 @@ function App() {
 }
 
 const root = createRoot(document.getElementById('root'))
-root.render(<App />)
+root.render(
+  <Providers>
+    <App />
+  </Providers>
+)
