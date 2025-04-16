@@ -22,6 +22,8 @@ const names = [
   'kick',
   'ping',
   'pong',
+  'evmConnect',
+  'evmDisconnect',
 ]
 
 const byName = {}

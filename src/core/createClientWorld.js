@@ -21,6 +21,7 @@ import { Particles } from './systems/Particles'
 import { Snaps } from './systems/Snaps'
 import { Wind } from './systems/Wind'
 import { XR } from './systems/XR'
+import { EVM } from './systems/EVMClient'
 
 export function createClientWorld() {
   const world = new World()
@@ -45,5 +46,7 @@ export function createClientWorld() {
   world.register('snaps', Snaps)
   world.register('wind', Wind)
   world.register('xr', XR)
+  // world.register('evm', EVM)
+  world.register('evm', EVM)
   return world
 }

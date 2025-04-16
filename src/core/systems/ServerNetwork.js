@@ -513,6 +513,14 @@ export class ServerNetwork extends System {
     socket.send('pong', time)
   }
 
+  onEvmConnect = (socket, address) => {
+    this.world.evm.onEvmConnect(socket, address)
+  }
+
+  onEvmDisconnect = socket => {
+    this.world.evm.onEvmDisconnect(socket)
+  }
+
   onDisconnect = (socket, code) => {
     socket.player.destroy(true)
     this.sockets.delete(socket.id)

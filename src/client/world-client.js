@@ -39,6 +39,7 @@ export function Client({ wsUrl, onSetup }) {
     }
     init()
   }, [])
+
   return (
     <div
       className='App'

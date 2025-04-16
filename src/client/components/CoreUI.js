@@ -13,10 +13,13 @@ import { buttons, propToLabel } from '../../core/extras/buttons'
 import { cls, isTouch } from '../utils'
 import { uuid } from '../../core/utils'
 import { ControlPriorities } from '../../core/extras/ControlPriorities'
+
 import { AppsPane } from './AppsPane'
 import { MenuMain } from './MenuMain'
 import { MenuApp } from './MenuApp'
 import { CircleUpIcon, HandIcon, KeyboardIcon, MenuIcon, MicIcon, MicOffIcon, VRIcon } from './Icons'
+
+import { EVM } from './EVM'
 
 export function CoreUI({ world }) {
   const [ref, width, height] = useElemSize()
@@ -117,6 +120,7 @@ function Content({ world, width, height }) {
       {!ready && <LoadingOverlay />}
       {kicked && <KickedOverlay code={kicked} />}
       {ready && isTouch && <TouchBtns world={world} />}
+      {ready && <EVM world={world} />}
     </div>
   )
 }
