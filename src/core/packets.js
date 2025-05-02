@@ -22,6 +22,9 @@ const names = [
   'kick',
   'ping',
   'pong',
+  'aiProcessQuery',
+  'aiCancelStream',
+  'llmEvent',
 ]
 
 const byName = {}
