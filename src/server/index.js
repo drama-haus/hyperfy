@@ -20,6 +20,19 @@ import { getDB } from './db'
 import { Storage } from './Storage'
 import { initCollections } from './collections'
 
+// Import MCP dependencies
+import { fileURLToPath } from 'url'
+import { AIClient } from './ai-client.js'
+import { readJWT } from '../core/utils-server'
+import { fastifyMCPSSE } from './mcp-fastify-plugin.js'
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
+
+const llmClient = new AIClient()
+
+// Get current file's directory (ESM equivalent of __dirname)
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
+
 const rootDir = path.join(__dirname, '../')
 const worldDir = path.join(rootDir, process.env.WORLD)
 const assetsDir = path.join(worldDir, '/assets')
@@ -47,9 +60,36 @@ const storage = new Storage(path.join(worldDir, '/storage.json'))
 // create world
 const world = createServerWorld()
 world.collections.deserialize(collections)
-world.init({ db, storage, loadPhysX })
 
 const fastify = Fastify({ logger: { level: 'error' } })
+
+// Create the MCP server instance
+const mcp = new McpServer({
+  name: 'hyperfy-mcp-server',
+  version: '0.0.1',
+})
+
+// Initialize world with all dependencies including MCP
+world.init({ db, storage, loadPhysX, mcp, llmClient })
+
+// Create an auth handler function to validate tokens and return player IDs
+const authHandler = async authToken => {
+  try {
+    const { userId } = await readJWT(authToken)
+    return userId
+  } catch (err) {
+    console.error('Error validating auth token for MCP:', err)
+    return null
+  }
+}
+
+// Register MCP SSE endpoints
+fastify.register(fastifyMCPSSE, {
+  server: mcp,
+  authHandler,
+  sseEndpoint: '/sse',
+  messagesEndpoint: '/messages',
+})
 
 fastify.register(cors)
 fastify.register(compress)
@@ -184,18 +224,19 @@ fastify.setErrorHandler((err, req, reply) => {
   reply.status(500).send()
 })
 
+async function worldNetwork(fastify) {
+  fastify.get('/ws', { websocket: true }, (ws, req) => {
+    world.network.onConnection(ws, req.query.authToken)
+  })
+}
+
+// Start the server
 try {
   await fastify.listen({ port, host: '0.0.0.0' })
 } catch (err) {
   console.error(err)
   console.error(`failed to launch on port ${port}`)
   process.exit(1)
-}
-
-async function worldNetwork(fastify) {
-  fastify.get('/ws', { websocket: true }, (ws, req) => {
-    world.network.onConnection(ws, req.query.authToken)
-  })
 }
 
 console.log(`running on port ${port}`)

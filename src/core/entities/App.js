@@ -187,6 +187,10 @@ export class App extends Entity {
     this.deadHook = { dead: false }
     // clear fields
     this.onFields?.([])
+    // unregister any MCP tools
+    if (this.world.ai) {
+      this.world.ai.unregisterAppMCPTools?.(this.data.id)
+    }
   }
 
   fixedUpdate(delta) {
