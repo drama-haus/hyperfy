@@ -10,6 +10,9 @@ export class Settings extends System {
     this.avatar = null
     this.public = null
     this.playerLimit = null
+    this.llmProvider = null
+    this.llmProviders = [] // Array of available LLM providers
+    this.llmModel = null  // Model to use for the current provider
 
     this.changes = null
   }
@@ -21,6 +24,9 @@ export class Settings extends System {
     this.avatar = data.avatar
     this.public = data.public
     this.playerLimit = data.playerLimit
+    this.llmProvider = data.llmProvider || null
+    this.llmProviders = data.llmProviders || []
+    this.llmModel = data.llmModel || null
     this.emit('change', {
       title: { value: this.title },
       desc: { value: this.desc },
@@ -28,6 +34,9 @@ export class Settings extends System {
       avatar: { value: this.avatar },
       public: { value: this.public },
       playerLimit: { value: this.playerLimit },
+      llmProvider: { value: this.llmProvider },
+      llmProviders: { value: this.llmProviders },
+      llmModel: { value: this.llmModel },
     })
   }
 
@@ -39,6 +48,9 @@ export class Settings extends System {
       avatar: this.avatar,
       public: this.public,
       playerLimit: this.playerLimit,
+      llmProvider: this.llmProvider,
+      llmProviders: this.llmProviders,
+      llmModel: this.llmModel,
     }
   }
 
