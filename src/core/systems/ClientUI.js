@@ -11,6 +11,7 @@ export class ClientUI extends System {
       active: false,
       app: null,
       pane: null,
+      conversations: false,
     }
     this.lastAppPane = 'app'
     this.control = null
@@ -42,6 +43,9 @@ export class ClientUI extends System {
     if (this.control.pointer.locked && this.state.active) {
       this.state.active = false
       this.broadcast()
+    }
+    if (this.control.keyP.pressed && this.control.shiftLeft.down) {
+      this.toggleConversations()
     }
     if (!this.control.pointer.locked && !this.state.active) {
       this.state.active = true
@@ -78,4 +82,11 @@ export class ClientUI extends System {
     this.control?.release()
     this.control = null
   }
+
+  toggleConversations = value => {
+    value = typeof value === 'boolean' ? value : !this.conversations
+    this.conversations = value
+    this.world.emit('conversations', this.conversations)
+  }
 }
+
