@@ -22,6 +22,48 @@ import { Snaps } from './systems/Snaps'
 import { Wind } from './systems/Wind'
 import { XR } from './systems/XR'
 
+/**
+ * Dynamically imports and registers client-side mod systems.
+ * Uses the generated mods manifest to know which modules to load.
+ * 
+ * @param {ReturnType<typeof createClientWorld>} world - the world instance
+ * @returns {Promise<void>}
+ */
+export async function loadClientMods(world) {
+  try {
+    // In the browser, we'll use a manifest file generated at build time
+    // that contains the paths to all client mods
+    const manifestResponse = await fetch('/mods-manifest.json');
+    if (!manifestResponse.ok) {
+      console.warn('Client mods manifest not found, skipping mod loading');
+      return;
+    }
+    
+    const manifest = await manifestResponse.json();
+    
+    // Load each mod in parallel
+    await Promise.all(
+      manifest.mods.map(async (modPath) => {
+        try {
+          // Use dynamic import to load the module
+          const { default: system } = await import(modPath);
+          if (typeof system === 'function') {
+            console.log('Registering client mod', system.name);
+            world.register(system.name, system);
+            console.log(`✔ Loaded client mod ${modPath}`);
+          } else {
+            console.warn(`⚠ ${modPath} has no default function export`);
+          }
+        } catch (err) {
+          console.error(`✖ Failed to load client mod ${modPath}:`, err);
+        }
+      })
+    );
+  } catch (err) {
+    console.error('Error loading client mods:', err);
+  }
+}
+
 export function createClientWorld() {
   const world = new World()
   world.register('client', Client)

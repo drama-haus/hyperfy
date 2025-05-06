@@ -18,6 +18,7 @@ import { ControlPriorities } from '../../core/extras/ControlPriorities'
 // import { MenuApp } from './MenuApp'
 import { ChevronDoubleUpIcon, HandIcon } from './Icons'
 import { Sidebar } from './Sidebar'
+import { ModsComponents } from './ModsComponents'
 
 export function CoreUI({ world }) {
   const ref = useRef()
@@ -104,6 +105,7 @@ export function CoreUI({ world }) {
       {!ready && <LoadingOverlay world={world} />}
       {kicked && <KickedOverlay code={kicked} />}
       {ready && isTouch && <TouchBtns world={world} />}
+      {ready && <ModsComponents world={world} />}
       <div id='core-ui-portal' />
     </div>
   )

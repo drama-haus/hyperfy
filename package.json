@@ -18,7 +18,7 @@
     "real-time"
   ],
   "scripts": {
-    "dev": "node scripts/build.mjs --dev",
+    "dev": "WORLD=./data/worlds/$(git rev-parse --abbrev-ref HEAD) node scripts/build.mjs --dev",
     "build": "node scripts/build.mjs",
     "start": "node build/index.js",
     "world:clean": "node scripts/clean-world.mjs",

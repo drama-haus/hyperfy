@@ -54,6 +54,11 @@ export class PlayerLocal extends Entity {
     this.capsuleRadius = 0.3
     this.capsuleHeight = 1.6
 
+    // Initialize custom data if it doesn't exist
+    if (!this.data.custom) {
+      this.data.custom = {}
+    }
+
     this.grounded = false
     this.groundAngle = 0
     this.groundNormal = new THREE.Vector3().copy(UP)
@@ -1033,6 +1038,48 @@ export class PlayerLocal extends Entity {
     }
     if (data.hasOwnProperty('roles')) {
       this.data.roles = data.roles
+      changed = true
+    }
+    if (data.hasOwnProperty('wallet')) {
+      this.data.wallet = data.wallet
+      this.world.events.emit('wallet', { playerId: this.data.id, wallet: data.wallet })
+    }
+    // Handle custom data modifications
+    if (data.hasOwnProperty('custom')) {
+      // Initialize if needed
+      if (!this.data.custom) {
+        this.data.custom = {}
+      }
+      
+      // Merge custom properties instead of replacing the entire object
+      if (typeof data.custom === 'object' && data.custom !== null) {
+        for (const key in data.custom) {
+          const value = data.custom[key]
+          this.data.custom[key] = value
+          // Emit event for each property change
+          this.world.events.emit(`custom:${key}`, { 
+            playerId: this.data.id, 
+            key, 
+            value 
+          })
+        }
+      }
+      changed = true
+    }
+    // Handle individual custom property modifications
+    else if (data.hasOwnProperty('customProp')) {
+      // Initialize if needed
+      if (!this.data.custom) {
+        this.data.custom = {}
+      }
+      
+      const { key, value } = data.customProp
+      this.data.custom[key] = value
+      this.world.events.emit(`custom:${key}`, { 
+        playerId: this.data.id, 
+        key, 
+        value 
+      })
       changed = true
     }
     if (avatarChanged) {
