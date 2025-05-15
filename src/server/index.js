@@ -43,7 +43,7 @@ const db = await getDB(path.join(worldDir, '/db.sqlite'))
 const storage = new Storage(path.join(worldDir, '/storage.json'))
 
 // create world
-const world = createServerWorld()
+const world = await createServerWorld()
 world.assetsUrl = process.env.PUBLIC_ASSETS_URL
 world.collections.deserialize(collections)
 world.init({ db, storage, assetsDir })
