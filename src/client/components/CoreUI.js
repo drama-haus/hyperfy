@@ -18,6 +18,10 @@ import { ControlPriorities } from '../../core/extras/ControlPriorities'
 // import { MenuApp } from './MenuApp'
 import { ChevronDoubleUpIcon, HandIcon } from './Icons'
 import { Sidebar } from './Sidebar'
+import { storage } from '../../core/storage'
+
+// Check for AI assistant feature flag
+const AI_ASSISTANT_ENABLED = Boolean(env.PUBLIC_AI_ASSISTANT)
 
 export function CoreUI({ world }) {
   const ref = useRef()
@@ -30,6 +34,9 @@ export function CoreUI({ world }) {
   const [disconnected, setDisconnected] = useState(false)
   const [apps, setApps] = useState(false)
   const [kicked, setKicked] = useState(null)
+  const [buildMode, setBuildMode] = useState(world.builder.enabled)
+  const [conversations, setConversations] = useState(false)
+
   useEffect(() => {
     world.on('ready', setReady)
     world.on('player', setPlayer)
@@ -37,9 +44,11 @@ export function CoreUI({ world }) {
     world.on('menu', setMenu)
     world.on('code', setCode)
     world.on('apps', setApps)
+    world.on('conversations', setConversations)
     world.on('avatar', setAvatar)
     world.on('kick', setKicked)
     world.on('disconnect', setDisconnected)
+    world.on('build-mode', setBuildMode)
     return () => {
       world.off('ready', setReady)
       world.off('player', setPlayer)
@@ -47,9 +56,11 @@ export function CoreUI({ world }) {
       world.off('menu', setMenu)
       world.off('code', setCode)
       world.off('apps', setApps)
+      world.off('conversations', setConversations)
       world.off('avatar', setAvatar)
       world.off('kick', setKicked)
       world.off('disconnect', setDisconnected)
+      world.off('build-mode', setBuildMode)
     }
   }, [])
 
@@ -67,6 +78,7 @@ export function CoreUI({ world }) {
     // elem.addEventListener('touchmove', onEvent)
     // elem.addEventListener('touchend', onEvent)
   }, [])
+
   useEffect(() => {
     document.documentElement.style.fontSize = `${16 * world.prefs.ui}px`
     function onChange(changes) {
@@ -79,6 +91,7 @@ export function CoreUI({ world }) {
       world.prefs.off('change', onChange)
     }
   }, [])
+  
   return (
     <div
       ref={ref}
@@ -108,220 +121,6 @@ export function CoreUI({ world }) {
     </div>
   )
 }
-
-// function Side({ world, menu }) {
-//   const inputRef = useRef()
-//   const [msg, setMsg] = useState('')
-//   const [chat, setChat] = useState(false)
-//   const [livekit, setLiveKit] = useState(() => world.livekit.status)
-//   const [actions, setActions] = useState(() => world.prefs.actions)
-//   useEffect(() => {
-//     const onPrefsChange = changes => {
-//       if (changes.actions) setActions(changes.actions.value)
-//     }
-//     const onLiveKitStatus = status => {
-//       setLiveKit({ ...status })
-//     }
-//     world.livekit.on('status', onLiveKitStatus)
-//     world.prefs.on('change', onPrefsChange)
-//     return () => {
-//       world.prefs.off('change', onPrefsChange)
-//       world.livekit.off('status', onLiveKitStatus)
-//     }
-//   }, [])
-//   useEffect(() => {
-//     const control = world.controls.bind({ priority: ControlPriorities.CORE_UI })
-//     control.slash.onPress = () => {
-//       if (!chat) setChat(true)
-//     }
-//     control.enter.onPress = () => {
-//       if (!chat) setChat(true)
-//     }
-//     control.mouseLeft.onPress = () => {
-//       if (control.pointer.locked && chat) {
-//         setChat(false)
-//       }
-//     }
-//     return () => control.release()
-//   }, [chat])
-//   useEffect(() => {
-//     if (chat) {
-//       inputRef.current.focus()
-//     } else {
-//       inputRef.current.blur()
-//     }
-//   }, [chat])
-//   const send = async e => {
-//     if (world.controls.pointer.locked) {
-//       setTimeout(() => setChat(false), 10)
-//     }
-//     if (!msg) {
-//       e.preventDefault()
-//       return setChat(false)
-//     }
-//     setMsg('')
-//     // check for commands
-//     if (msg.startsWith('/')) {
-//       world.chat.command(msg)
-//       return
-//     }
-//     // otherwise post it
-//     const player = world.entities.player
-//     const data = {
-//       id: uuid(),
-//       from: player.data.name,
-//       fromId: player.data.id,
-//       body: msg,
-//       createdAt: moment().toISOString(),
-//     }
-//     world.chat.add(data, true)
-//     if (isTouch) {
-//       e.target.blur()
-//       // setTimeout(() => setChat(false), 10)
-//     }
-//   }
-//   return (
-//     <div
-//       className='side'
-//       css={css`
-//         position: absolute;
-//         top: calc(4rem + env(safe-area-inset-top));
-//         left: calc(4rem + env(safe-area-inset-left));
-//         bottom: calc(4rem + env(safe-area-inset-bottom));
-//         right: calc(4rem + env(safe-area-inset-right));
-//         display: flex;
-//         align-items: stretch;
-//         font-size: 1rem;
-//         .side-content {
-//           max-width: 21rem;
-//           width: 100%;
-//           display: flex;
-//           flex-direction: column;
-//           align-items: stretch;
-//         }
-//         .side-btns {
-//           display: flex;
-//           align-items: center;
-//           margin-left: -0.5rem;
-//         }
-//         .side-btn {
-//           pointer-events: auto;
-//           /* margin-bottom: 1rem; */
-//           width: 2.5rem;
-//           height: 2.5rem;
-//           display: flex;
-//           align-items: center;
-//           justify-content: center;
-//           cursor: pointer;
-//           svg {
-//             filter: drop-shadow(0 0.0625rem 0.125rem rgba(0, 0, 0, 0.2));
-//           }
-//         }
-//         .side-mid {
-//           flex: 1;
-//           display: flex;
-//           flex-direction: column;
-//           justify-content: center;
-//         }
-//         .side-chatbox {
-//           margin-top: 0.5rem;
-//           background: rgba(0, 0, 0, 0.3);
-//           padding: 0.625rem;
-//           display: flex;
-//           align-items: center;
-//           opacity: 0;
-//           &.active {
-//             opacity: 1;
-//             pointer-events: auto;
-//           }
-//           &-input {
-//             flex: 1;
-//             /* paint-order: stroke fill; */
-//             /* -webkit-text-stroke: 0.25rem rgba(0, 0, 0, 0.2); */
-//             &::placeholder {
-//               color: rgba(255, 255, 255, 0.5);
-//             }
-//           }
-//         }
-//         @media all and (max-width: 700px), (max-height: 700px) {
-//           top: calc(1.5rem + env(safe-area-inset-top));
-//           left: calc(1.5rem + env(safe-area-inset-left));
-//           bottom: calc(1.5rem + env(safe-area-inset-bottom));
-//           right: calc(1.5rem + env(safe-area-inset-right));
-//         }
-//       `}
-//     >
-//       <div className='side-content'>
-//         <div className='side-btns'>
-//           <div className='side-btn' onClick={() => world.ui.toggleMain()}>
-//             <MenuIcon size='1.5rem' />
-//           </div>
-//           {isTouch && (
-//             <div
-//               className='side-btn'
-//               onClick={() => {
-//                 console.log('setChat', !chat)
-//                 setChat(!chat)
-//               }}
-//             >
-//               <ChatIcon size='1.5rem' />
-//             </div>
-//           )}
-//           {livekit.connected && (
-//             <div
-//               className='side-btn'
-//               onClick={() => {
-//                 world.livekit.setMicrophoneEnabled()
-//               }}
-//             >
-//               {livekit.mic ? <MicIcon size='1.5rem' /> : <MicOffIcon size='1.5rem' />}
-//             </div>
-//           )}
-//           {world.xr.supportsVR && (
-//             <div
-//               className='side-btn'
-//               onClick={() => {
-//                 world.xr.enter()
-//               }}
-//             >
-//               <VRIcon size='1.5rem' />
-//             </div>
-//           )}
-//         </div>
-//         {menu?.type === 'main' && <MenuMain world={world} />}
-//         {menu?.type === 'app' && <MenuApp key={menu.app.data.id} world={world} app={menu.app} blur={menu.blur} />}
-//         <div className='side-mid'>{!menu && !isTouch && actions && <Actions world={world} />}</div>
-//         {isTouch && !chat && <MiniMessages world={world} />}
-//         {(isTouch ? chat : true) && <Messages world={world} active={chat || menu} />}
-//         <label className={cls('side-chatbox', { active: chat })}>
-//           <input
-//             ref={inputRef}
-//             className='side-chatbox-input'
-//             type='text'
-//             placeholder='Say something...'
-//             value={msg}
-//             onChange={e => setMsg(e.target.value)}
-//             onKeyDown={e => {
-//               if (e.code === 'Escape') {
-//                 setChat(false)
-//               }
-//               // meta quest 3 isn't spec complaint and instead has e.code = '' and e.key = 'Enter'
-//               // spec says e.code should be a key code and e.key should be the text output of the key eg 'b', 'B', and '\n'
-//               if (e.code === 'Enter' || e.key === 'Enter') {
-//                 send(e)
-//               }
-//             }}
-//             onBlur={e => {
-//               if (!isTouch) {
-//                 setChat(false)
-//               }
-//             }}
-//           />
-//         </label>
-//       </div>
-//     </div>
-//   )
-// }
 
 function Chat({ world }) {
   const inputRef = useRef()
