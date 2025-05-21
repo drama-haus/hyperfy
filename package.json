@@ -43,6 +43,7 @@
     "@firebolt-dev/jsx": "^0.4.3",
     "@pixiv/three-vrm": "^3.3.3",
     "better-sqlite3": "^11.7.2",
+    "chokidar": "^4.0.3",
     "d3": "^7.9.0",
     "dotenv-flow": "^4.1.0",
     "esbuild-plugin-polyfill-node": "^0.3.0",

@@ -204,16 +204,23 @@ export class World extends EventEmitter {
   resolveURL(url, allowLocal) {
     if (!url) return url
     url = url.trim()
-    if (url.startsWith('blob')) {
+    if (url.startsWith('blob:')) {
       return url
     }
     if (url.startsWith('asset://')) {
+      let pathName = url.substring('asset://'.length)
       if (this.assetsDir && allowLocal) {
-        return url.replace('asset:/', this.assetsDir)
+        const queryIndex = pathName.indexOf('?')
+        if (queryIndex !== -1) {
+          pathName = pathName.substring(0, queryIndex)
+        }
+        const baseAssetsDir = this.assetsDir.endsWith('/') ? this.assetsDir : this.assetsDir + '/';
+        return baseAssetsDir + pathName
       } else if (this.assetsUrl) {
-        return url.replace('asset:/', this.assetsUrl)
+        const baseAssetsUrl = this.assetsUrl.endsWith('/') ? this.assetsUrl : this.assetsUrl + '/';
+        return baseAssetsUrl + pathName
       } else {
-        console.error('resolveURL: no assetsUrl or assetsDir defined')
+        console.error('resolveURL: no assetsUrl or assetsDir defined for asset:// URL')
         return url
       }
     }
@@ -224,7 +231,7 @@ export class World extends EventEmitter {
       return `https:${url}`
     }
     if (url.startsWith('/')) {
-      return url
+      return url;
     }
     return `https://${url}`
   }

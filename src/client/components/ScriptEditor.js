@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { css } from '@firebolt-dev/css'
-import { hashFile } from '../../core/utils-client'
+// import { hashFile } from '../../core/utils-client' // hashFile is no longer needed for filename
 
 // editor will remember a single script so you can flip between tabs without hitting save (eg viewing docs)
 const cached = {
@@ -11,32 +11,47 @@ const cached = {
 }
 
 export function ScriptEditor({ app, onHandle }) {
+  const [isLocked, setIsLocked] = useState(false)
   const key = app.data.id
   const mountRef = useRef()
   const codeRef = useRef()
   const [editor, setEditor] = useState(null)
   const save = async () => {
+    setIsLocked(true)
+    if (document.activeElement) {
+      document.activeElement.blur()
+    }
+
     const world = app.world
-    const blueprint = app.blueprint
+    const blueprint = app.blueprint // Current blueprint, version not incremented by client here
     const code = codeRef.current
-    // convert to file
+
+    // Convert to file
     const blob = new Blob([code], { type: 'text/plain' })
-    const file = new File([blob], 'script.js', { type: 'text/plain' })
-    // immutable hash the file
-    const hash = await hashFile(file)
-    // use hash as glb filename
-    const filename = `${hash}.js`
-    // canonical url to this file
-    const url = `asset://${filename}`
-    // cache file locally so this client can insta-load it
-    world.loader.insert('script', url, file)
-    // update blueprint locally (also rebuilds apps)
-    const version = blueprint.version + 1
-    world.blueprints.modify({ id: blueprint.id, version, script: url })
-    // upload script
-    await world.network.upload(file)
-    // broadcast blueprint change to server + other clients
-    world.network.send('blueprintModified', { id: blueprint.id, version, script: url })
+    // Use blueprint ID for a stable base filename
+    const baseFilename = blueprint.script?.split('/').pop() ?? `script-${blueprint.id}.js`
+    // Create the File object with the stable base filename
+    const file = new File([blob], baseFilename, { type: 'text/plain' })
+
+    // Upload script (server receives file named baseFilename, e.g., "script-blueprintId.js")
+    // The AssetWatcher on the server will detect this change, version the blueprint,
+    // update the script URL with a new version parameter, and broadcast 'blueprintModified'.
+    try {
+      await world.network.upload(file)
+      // Optional: provide some UI feedback that save initiated, actual update comes from server
+      console.log('[ScriptEditor] Script uploaded. Waiting for server to process and broadcast update.')
+    } catch (error) {
+      setIsLocked(false)
+      editor?.focus()
+      console.error('[ScriptEditor] Error uploading script:', error)
+      // Optional: provide error feedback to the user
+    }
+
+    // NO local version increment of blueprint.
+    // NO local world.blueprints.modify call.
+    // NO local world.network.send('blueprintModified') call.
+    // NO world.loader.insert() with a client-guessed versioned URL.
+    // All these actions are now handled authoritatively by the server via AssetWatcher.
   }
   const saveState = () => {
     if (editor) {
@@ -101,6 +116,28 @@ export function ScriptEditor({ app, onHandle }) {
     }
   }, [])
 
+  useEffect(() => {
+    const handleBuild = (id) => {
+      if(app.data?.id !== id) return
+      if (editor) {
+        setIsLocked(false)
+        editor.focus()
+        const newCode = app.script.code
+        const model = editor.getModel()
+        if (model && model.getValue() !== newCode) {
+          model.setValue(newCode)
+        }
+        codeRef.current = newCode
+      }
+    }
+    // app.on('build', handleBuild)
+    app.world.events.on('appBuilt', handleBuild)
+
+    return () => {
+      app.world.events.off('appBuilt', handleBuild)
+    }
+  }, [editor])
+
   return (
     <div
       className='editor'
@@ -119,9 +156,25 @@ export function ScriptEditor({ app, onHandle }) {
           // removes the blue focus border
           --vscode-focusBorder: #00000000 !important;
         }
+        .loading-overlay {
+          position: absolute;
+          inset: 0;
+          background-color: rgba(0, 0, 0, 0.5);
+          display: flex;
+          justify-content: center;
+          align-items: center;
+          color: white;
+          font-size: 1.5em;
+          z-index: 10; // Ensure it's above the editor
+        }
       `}
     >
       <div className='editor-mount' ref={mountRef} />
+      {isLocked && (
+        <div className='loading-overlay'>
+          <div>Loading...</div> {/* You can replace this with a spinner component */}
+        </div>
+      )}
     </div>
   )
 }

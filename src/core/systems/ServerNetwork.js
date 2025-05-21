@@ -535,6 +535,57 @@ export class ServerNetwork extends System {
     this.sendTo(data.networkId, 'playerSessionAvatar', data.avatar)
   }
 
+  onScriptRenamed = async (socket, data) => {
+    if (!this.isBuilder(socket.player)) {
+      socket.send('chatAdded', {
+        id: uuid(),
+        from: null,
+        fromId: null,
+        body: 'Error: You do not have permission to rename scripts.',
+        error: true, // Optional: flag for client to display as error
+        createdAt: moment().toISOString(),
+      })
+      return console.error('[ServerNetwork] Player attempted to rename script without builder permission.');
+    }
+
+    const { blueprintId, newFilename } = data;
+    if (!blueprintId || !newFilename) {
+      socket.send('chatAdded', {
+        id: uuid(),
+        from: null,
+        fromId: null,
+        body: 'Error: Missing blueprintId or newFilename for script rename.',
+        error: true,
+        createdAt: moment().toISOString(),
+      })
+      return console.error('[ServerNetwork] Missing blueprintId or newFilename for onScriptRenamed.');
+    }
+
+    try {
+      await this.world.assetWatcher.renameScript(blueprintId, newFilename);
+      // AssetWatcher's 'change' and 'unlink' handlers will deal with blueprint modification
+      // and broadcasting 'blueprintModified' so we don't need to do it here.
+      // We could send a success message if desired:
+      // socket.send('chatAdded', {
+      //   id: uuid(),
+      //   from: null,
+      //   fromId: null,
+      //   body: `Script successfully queued for rename to ${newFilename}.`,
+      //   createdAt: moment().toISOString(),
+      // });
+    } catch (error) {
+      console.error(`[ServerNetwork] Error renaming script for blueprint ${blueprintId} to ${newFilename}:`, error.message);
+      socket.send('chatAdded', {
+        id: uuid(),
+        from: null,
+        fromId: null,
+        body: `Error renaming script: ${error.message}`,
+        error: true,
+        createdAt: moment().toISOString(),
+      })
+    }
+  }
+
   onPing = (socket, time) => {
     socket.send('pong', time)
   }

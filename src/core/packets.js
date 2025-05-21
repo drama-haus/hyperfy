@@ -19,6 +19,7 @@ const names = [
   'playerSessionAvatar',
   'settingsModified',
   'spawnModified',
+  'scriptRenamed',
   'kick',
   'ping',
   'pong',

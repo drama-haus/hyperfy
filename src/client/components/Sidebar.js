@@ -1402,6 +1402,33 @@ function Script({ world, hidden }) {
   const containerRef = useRef()
   const resizeRef = useRef()
   const [handle, setHandle] = useState(null)
+  const [isEditingTitle, setIsEditingTitle] = useState(false)
+  const [editableTitle, setEditableTitle] = useState('')
+
+  const [currentScriptName, setCurrentScriptName] = useState('Script')
+
+  useEffect(() => {
+    if (!app || !world?.events) return;
+
+    // Update currentScriptName whenever app.blueprint.script changes
+    const scriptName = app.blueprint.script?.split('/').pop().split('?')[0] || 'Script'
+    setCurrentScriptName(scriptName)
+
+    const handleAppBuilt = (builtAppId) => {
+      // Check if the event is for the currently active app in the Script panel
+      if (app.data?.id === builtAppId) {
+        // Update currentScriptName when app is rebuilt
+        const newScriptName = app.blueprint.script?.split('/').pop().split('?')[0] || 'Script'
+        setCurrentScriptName(newScriptName)
+      }
+    };
+
+    world.events.on('appBuilt', handleAppBuilt);
+    return () => {
+      world.events.off('appBuilt', handleAppBuilt);
+    };
+  }, [app, world, app.blueprint.script]); // Added app.blueprint.script as dependency
+
   useEffect(() => {
     const elem = resizeRef.current
     const container = containerRef.current
@@ -1429,6 +1456,68 @@ function Script({ world, hidden }) {
       elem.removeEventListener('pointerdown', onPointerDown)
     }
   }, [])
+
+  const handleTitleClick = () => {
+    setEditableTitle(currentScriptName === 'Script' ? '' : currentScriptName) // Don't prefill with default 'Script'
+    setIsEditingTitle(true)
+  }
+
+  const validateAndRenameScript = (newName) => {
+    let processedName = newName.trim();
+
+    if (!processedName) {
+      // Default to script-blueprintId.js if empty
+      processedName = `script-${app.blueprint.id}.js`;
+    } else if (!processedName.endsWith('.js')) {
+      // Append .js if not present
+      processedName = `${processedName}.js`;
+    }
+
+    // Further server-side validation will catch things like path separators.
+
+    if (processedName === currentScriptName) {
+      setIsEditingTitle(false); // No actual change
+      return;
+    }
+
+    world.network.send('scriptRenamed', {
+      blueprintId: app.blueprint.id,
+      newFilename: processedName,
+    });
+    setIsEditingTitle(false);
+  }
+
+  const handleTitleChange = (event) => {
+    setEditableTitle(event.target.value)
+  }
+
+  const handleTitleKeyDown = (event) => {
+    if (event.key === 'Enter') {
+      event.preventDefault()
+      validateAndRenameScript(editableTitle)
+    }
+    if (event.key === 'Escape') {
+      event.preventDefault()
+      setIsEditingTitle(false)
+      setEditableTitle(currentScriptName) // Reset to original name
+    }
+  }
+
+  const handleTitleBlur = () => {
+    // If it was a real attempt to rename, Enter would have handled it.
+    // Blur without Enter often means clicking away, so we check if the name is different and valid.
+    // Or, we can just discard changes on blur to keep it simple and rely on Enter for submission.
+    // For simplicity, let's revert if not submitted via Enter, or if currentScriptName changed in background
+    if (isEditingTitle) { // Only if still in editing mode (e.g. didn't submit with Enter)
+        if (editableTitle !== currentScriptName && editableTitle.endsWith('.js') && editableTitle.trim() !== '') {
+            // If they made a valid change and blurred, let's submit it
+            validateAndRenameScript(editableTitle)
+        } else {
+            setIsEditingTitle(false) // otherwise, cancel edit on blur
+        }
+    }
+  }
+
   return (
     <div
       ref={containerRef}
@@ -1485,7 +1574,31 @@ function Script({ world, hidden }) {
       `}
     >
       <div className='script-head'>
-        <div className='script-title'>Script</div>
+        {isEditingTitle ? (
+          <input
+            type='text'
+            value={editableTitle}
+            onChange={handleTitleChange}
+            onKeyDown={handleTitleKeyDown}
+            onBlur={handleTitleBlur}
+            autoFocus
+            css={css`
+              flex: 1;
+              font-weight: 500;
+              font-size: 1rem;
+              line-height: 1;
+              background-color: rgba(255,255,255,0.1);
+              border: 1px solid rgba(255,255,255,0.2);
+              color: white;
+              padding: 0.2rem 0.4rem;
+              border-radius: 3px;
+            `}
+          />
+        ) : (
+          <div className='script-title' onClick={handleTitleClick} title="Click to rename script">
+            {currentScriptName}
+          </div>
+        )}
         <div className='script-btn' onClick={() => handle?.save()}>
           <SaveIcon size='1.125rem' />
         </div>

@@ -112,21 +112,40 @@ fastify.post('/api/upload', async (req, reply) => {
   // console.log('DEBUG: slow uploads')
   // await new Promise(resolve => setTimeout(resolve, 2000))
   const file = await req.file()
-  const ext = file.filename.split('.').pop().toLowerCase()
+  const originalFilename = file.filename; // e.g., script-xyz.js or model.glb
+  const ext = originalFilename.split('.').pop().toLowerCase()
+
   // create temp buffer to store contents
   const chunks = []
   for await (const chunk of file.file) {
     chunks.push(chunk)
   }
   const buffer = Buffer.concat(chunks)
-  // hash from buffer
-  const hash = await hashFile(buffer)
-  const filename = `${hash}.${ext}`
+
+  let finalFilename;
+  const isScriptFile = originalFilename.split('?')[0].endsWith('.js');
+
+  if (isScriptFile) {
+    // For script files, use the original filename directly
+    finalFilename = originalFilename.split('?')[0];
+  } else {
+    // For other files, hash the content for the filename (existing behavior)
+    const hash = await hashFile(buffer)
+    finalFilename = `${hash}.${ext}`
+  }
+
   // save to fs
-  const filePath = path.join(assetsDir, filename)
-  const exists = await fs.exists(filePath)
-  if (!exists) {
+  const filePath = path.join(assetsDir, finalFilename)
+
+  // For script files, we always want to write/overwrite.
+  // For other (hashed) files, the exists check prevents re-writing identical content.
+  if (isScriptFile) {
     await fs.writeFile(filePath, buffer)
+  } else {
+    const exists = await fs.exists(filePath)
+    if (!exists) {
+      await fs.writeFile(filePath, buffer)
+    }
   }
 })
 
