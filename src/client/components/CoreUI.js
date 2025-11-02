@@ -18,6 +18,24 @@ import { ControlPriorities } from '../../core/extras/ControlPriorities'
 import { ChevronDoubleUpIcon, HandIcon } from './Icons'
 import { Sidebar } from './Sidebar'
 
+import { AppsPane } from './AppsPane'
+import { MenuMain } from './MenuMain'
+import { MenuApp } from './MenuApp'
+import {
+  ChatIcon,
+  ChevronDoubleUpIcon,
+  CircleUpIcon,
+  HandIcon,
+  KeyboardIcon,
+  MenuIcon,
+  MicIcon,
+  MicOffIcon,
+  SettingsIcon,
+  VRIcon,
+} from './Icons'
+
+import { EVM } from './EVM'
+
 export function CoreUI({ world }) {
   const ref = useRef()
   const [ready, setReady] = useState(false)
@@ -106,6 +124,7 @@ export function CoreUI({ world }) {
       {ready && isTouch && <TouchStick world={world} />}
       {confirm && <Confirm options={confirm} />}
       <div id='core-ui-portal' />
+      {ready && <EVM world={world} />}
     </div>
   )
 }
