@@ -1,3 +1,4 @@
+import { isTouch } from '../../client/utils'
 import { bindRotations } from '../extras/bindRotations'
 import { buttons, codeToProp } from '../extras/buttons'
 import * as THREE from '../extras/three'
@@ -9,6 +10,17 @@ const MouseLeft = 'mouseLeft'
 const MouseRight = 'mouseRight'
 const HandednessLeft = 'left'
 const HandednessRight = 'right'
+
+const XR_TREMOR_SMOOTHING_FACTOR = 0.6
+
+const m1 = new THREE.Matrix4()
+const m2 = new THREE.Matrix4()
+const v1 = new THREE.Vector3()
+const v2 = new THREE.Vector3()
+const q1 = new THREE.Quaternion()
+const q2 = new THREE.Quaternion()
+
+const captured = new Set()
 
 let actionIds = 0
 
@@ -31,10 +43,18 @@ const controlTypes = {
   pointer: createPointer,
   screen: createScreen,
   camera: createCamera,
+  xrLeftRayPose: createPose,
+  xrLeftGripPose: createPose,
   xrLeftStick: createVector,
+  xrLeftTrigger: createButton,
+  xrLeftGrip: createButton,
   xrLeftBtn1: createButton,
   xrLeftBtn2: createButton,
+  xrRightRayPose: createPose,
+  xrRightGripPose: createPose,
   xrRightStick: createVector,
+  xrRightTrigger: createButton,
+  xrRightGrip: createButton,
   xrRightBtn1: createButton,
   xrRightBtn2: createButton,
   touchA: createButton,
@@ -71,6 +91,27 @@ export class ClientControls extends System {
     this.world.on('xrSession', this.onXRSession)
   }
 
+  applyXRRig(xrRig) {
+    for (const control of this.controls) {
+      if (control.entries.xrLeftRayPose) {
+        const pose = control.entries.xrLeftRayPose
+        const scale = v1.set(1, 1, 1)
+        m1.compose(pose.lPosition, pose.lQuaternion, scale)
+        m2.compose(xrRig.position, xrRig.quaternion, scale)
+        m1.premultiply(m2)
+        m1.decompose(pose.position, pose.quaternion, scale)
+      }
+      if (control.entries.xrRightRayPose) {
+        const pose = control.entries.xrRightRayPose
+        const scale = v1.set(1, 1, 1)
+        m1.compose(pose.lPosition, pose.lQuaternion, scale)
+        m2.compose(xrRig.position, xrRig.quaternion, scale)
+        m1.premultiply(m2)
+        m1.decompose(pose.position, pose.quaternion, scale)
+      }
+    }
+  }
+
   preFixedUpdate() {
     // mouse wheel delta
     for (const control of this.controls) {
@@ -81,14 +122,81 @@ export class ClientControls extends System {
     }
     // xr
     if (this.xrSession) {
+      const referenceSpace = this.world.graphics.renderer.xr.getReferenceSpace()
+      const frame = this.world.graphics.renderer.xr.getFrame()
+      const player = this.world.entities.player
       this.xrSession.inputSources?.forEach(src => {
         // left
         if (src.gamepad && src.handedness === HandednessLeft) {
+          captured.clear()
           for (const control of this.controls) {
+            if (control.entries.xrLeftRayPose) {
+              if (src.targetRaySpace) {
+                const ray = frame.getPose(src.targetRaySpace, referenceSpace)
+                if (ray) {
+                  const pose = control.entries.xrLeftRayPose
+                  // apply tremor smoothing to local change
+                  if (!pose.lPosition) {
+                    pose.lPosition = new THREE.Vector3().copy(ray.transform.position)
+                    pose.lQuaternion = new THREE.Quaternion().copy(ray.transform.orientation)
+                  }
+                  pose.lPosition.lerp(v1.copy(ray.transform.position), 1 - XR_TREMOR_SMOOTHING_FACTOR)
+                  pose.lQuaternion.slerp(q1.copy(ray.transform.orientation), 1 - XR_TREMOR_SMOOTHING_FACTOR)
+                  // world transform is applied above in this.applyXRRig()
+                }
+              }
+            }
+            if (control.entries.xrLeftGripPose) {
+              if (src.gripSpace) {
+                const grip = frame.getPose(src.gripSpace, referenceSpace)
+                if (grip) {
+                  const pose = control.entries.xrLeftGripPose
+                  // todo: tremor smoothing?
+                  pose.position.copy(grip.transform.position)
+                  pose.quaternion.copy(grip.transform.orientation)
+                  // pose.matrix.fromArray(grip.transform.matrix)
+                }
+              }
+            }
             if (control.entries.xrLeftStick) {
-              control.entries.xrLeftStick.value.x = src.gamepad.axes[2]
-              control.entries.xrLeftStick.value.z = src.gamepad.axes[3]
-              if (control.entries.xrLeftStick.capture) break
+              if (captured.has('xrLeftStick')) {
+                control.entries.xrLeftStick.value.x = 0
+                control.entries.xrLeftStick.value.z = 0
+              } else {
+                control.entries.xrLeftStick.value.x = src.gamepad.axes[2]
+                control.entries.xrLeftStick.value.z = src.gamepad.axes[3]
+                if (control.entries.xrLeftStick.capture) {
+                  captured.add('xrLeftStick')
+                }
+              }
+            }
+            if (control.entries.xrLeftTrigger) {
+              const button = control.entries.xrLeftTrigger
+              const down = src.gamepad.buttons[0].value > 0.9
+              if (down && !button.down) {
+                button.pressed = true
+                button.onPress?.()
+              }
+              if (!down && button.down) {
+                button.released = true
+                button.onRelease?.()
+              }
+              button.down = down
+              button.value = src.gamepad.buttons[0].value
+            }
+            if (control.entries.xrLeftGrip) {
+              const button = control.entries.xrLeftGrip
+              const down = src.gamepad.buttons[1].pressed
+              if (down && !button.down) {
+                button.pressed = true
+                button.onPress?.()
+              }
+              if (!down && button.down) {
+                button.released = true
+                button.onRelease?.()
+              }
+              button.down = down
+              button.value = src.gamepad.buttons[1].value
             }
             if (control.entries.xrLeftBtn1) {
               const button = control.entries.xrLeftBtn1
@@ -120,11 +228,75 @@ export class ClientControls extends System {
         }
         // right
         if (src.gamepad && src.handedness === HandednessRight) {
+          captured.clear()
           for (const control of this.controls) {
+            if (control.entries.xrRightRayPose) {
+              if (src.targetRaySpace) {
+                const ray = frame.getPose(src.targetRaySpace, referenceSpace)
+                if (ray) {
+                  const pose = control.entries.xrRightRayPose
+                  // apply tremor smoothing to local change
+                  if (!pose.lPosition) {
+                    pose.lPosition = new THREE.Vector3().copy(ray.transform.position)
+                    pose.lQuaternion = new THREE.Quaternion().copy(ray.transform.orientation)
+                  }
+                  pose.lPosition.lerp(v1.copy(ray.transform.position), 1 - XR_TREMOR_SMOOTHING_FACTOR)
+                  pose.lQuaternion.slerp(q1.copy(ray.transform.orientation), 1 - XR_TREMOR_SMOOTHING_FACTOR)
+                  // world transform is applied above in this.applyXRRig()
+                }
+              }
+            }
+            if (control.entries.xrRightGripPose) {
+              if (src.gripSpace) {
+                const grip = frame.getPose(src.gripSpace, referenceSpace)
+                if (grip) {
+                  const pose = control.entries.xrRightGripPose
+                  // todo: tremor smoothing?
+                  pose.position.copy(grip.transform.position)
+                  pose.quaternion.copy(grip.transform.orientation)
+                  // pose.matrix.fromArray(grip.transform.matrix)
+                }
+              }
+            }
             if (control.entries.xrRightStick) {
-              control.entries.xrRightStick.value.x = src.gamepad.axes[2]
-              control.entries.xrRightStick.value.z = src.gamepad.axes[3]
-              if (control.entries.xrRightStick.capture) break
+              if (captured.has('xrRightStick')) {
+                control.entries.xrRightStick.value.x = 0
+                control.entries.xrRightStick.value.z = 0
+              } else {
+                control.entries.xrRightStick.value.x = src.gamepad.axes[2]
+                control.entries.xrRightStick.value.z = src.gamepad.axes[3]
+                if (control.entries.xrRightStick.capture) {
+                  captured.add('xrRightStick')
+                }
+              }
+            }
+            if (control.entries.xrRightTrigger) {
+              const button = control.entries.xrRightTrigger
+              const down = src.gamepad.buttons[0].value > 0.9
+              if (down && !button.down) {
+                button.pressed = true
+                button.onPress?.()
+              }
+              if (!down && button.down) {
+                button.released = true
+                button.onRelease?.()
+              }
+              button.down = down
+              button.value = src.gamepad.buttons[0].value
+            }
+            if (control.entries.xrRightGrip) {
+              const button = control.entries.xrRightGrip
+              const down = src.gamepad.buttons[1].pressed
+              if (down && !button.down) {
+                button.pressed = true
+                button.onPress?.()
+              }
+              if (!down && button.down) {
+                button.released = true
+                button.onRelease?.()
+              }
+              button.down = down
+              button.value = src.gamepad.buttons[1].value
             }
             if (control.entries.xrRightBtn1) {
               const button = control.entries.xrRightBtn1
@@ -204,25 +376,35 @@ export class ClientControls extends System {
     document.addEventListener('pointerlockchange', this.onPointerLockChange)
     this.viewport.addEventListener('pointerdown', this.onPointerDown)
     window.addEventListener('pointermove', this.onPointerMove)
-    this.viewport.addEventListener('touchstart', this.onTouchStart)
-    this.viewport.addEventListener('touchmove', this.onTouchMove)
-    this.viewport.addEventListener('touchend', this.onTouchEnd)
-    this.viewport.addEventListener('touchcancel', this.onTouchEnd)
     this.viewport.addEventListener('pointerup', this.onPointerUp)
+    this.viewport.addEventListener('pointercancel', this.onPointerUp)
     this.viewport.addEventListener('wheel', this.onScroll, { passive: false })
     document.body.addEventListener('contextmenu', this.onContextMenu)
+    this.viewport.addEventListener('touchstart', this.onTouchStart)
     window.addEventListener('resize', this.onResize)
+    window.addEventListener('focus', this.onFocus)
     window.addEventListener('blur', this.onBlur)
   }
 
   bind(options = {}) {
     const self = this
     const entries = {}
+    let reticleSupressor
     const control = {
       options,
       entries,
       actions: null,
       api: {
+        hideReticle(value = true) {
+          if (reticleSupressor && value) return
+          if (!reticleSupressor && !value) return
+          if (reticleSupressor) {
+            reticleSupressor?.()
+            reticleSupressor = null
+          } else {
+            reticleSupressor = self.world.ui.suppressReticle()
+          }
+        },
         setActions(value) {
           if (value !== null && !Array.isArray(value)) {
             throw new Error('[control] actions must be null or array')
@@ -236,6 +418,7 @@ export class ClientControls extends System {
           self.buildActions()
         },
         release: () => {
+          reticleSupressor?.()
           const idx = this.controls.indexOf(control)
           if (idx === -1) return
           this.controls.splice(idx, 1)
@@ -414,11 +597,37 @@ export class ClientControls extends System {
 
   onPointerDown = e => {
     if (e.isCoreUI) return
+    if (e.pointerType === 'touch') {
+      e.preventDefault()
+      const info = {
+        id: e.pointerId,
+        position: new THREE.Vector3(e.clientX, e.clientY, 0),
+        prevPosition: new THREE.Vector3(e.clientX, e.clientY, 0),
+        delta: new THREE.Vector3(),
+        pointerType: e.pointerType,
+      }
+      this.touches.set(e.pointerId, info)
+      for (const control of this.controls) {
+        const consume = control.options.onTouch?.(info)
+        if (consume) break
+      }
+    }
     this.checkPointerChanges(e)
   }
 
   onPointerMove = e => {
     if (e.isCoreUI) return
+    if (e.pointerType === 'touch') {
+      const info = this.touches.get(e.pointerId)
+      if (info) {
+        info.delta.x += e.clientX - info.prevPosition.x
+        info.delta.y += e.clientY - info.prevPosition.y
+        info.position.x = e.clientX
+        info.position.y = e.clientY
+        info.prevPosition.x = e.clientX
+        info.prevPosition.y = e.clientY
+      }
+    }
     // this.checkPointerChanges(e)
     const rect = this.viewport.getBoundingClientRect()
     const offsetX = e.pageX - rect.left
@@ -433,6 +642,16 @@ export class ClientControls extends System {
 
   onPointerUp = e => {
     if (e.isCoreUI) return
+    if (e.pointerType === 'touch') {
+      const info = this.touches.get(e.pointerId)
+      if (info) {
+        for (const control of this.controls) {
+          const consume = control.options.onTouchEnd?.(info)
+          if (consume) break
+        }
+        this.touches.delete(e.pointerId)
+      }
+    }
     this.checkPointerChanges(e)
   }
 
@@ -496,6 +715,7 @@ export class ClientControls extends System {
   }
 
   async lockPointer() {
+    if (isTouch) return
     this.pointer.shouldLock = true
     try {
       await this.viewport.requestPointerLock()
@@ -551,55 +771,15 @@ export class ClientControls extends System {
   onTouchStart = e => {
     if (e.isCoreUI) return
     e.preventDefault()
-    for (let i = 0; i < e.changedTouches.length; i++) {
-      const touch = e.changedTouches[i]
-      const info = {
-        id: touch.identifier,
-        position: new THREE.Vector3(touch.clientX, touch.clientY, 0),
-        prevPosition: new THREE.Vector3(touch.clientX, touch.clientY, 0),
-        delta: new THREE.Vector3(),
-      }
-      this.touches.set(info.id, info)
-      for (const control of this.controls) {
-        const consume = control.options.onTouch?.(info)
-        if (consume) break
-      }
-    }
-  }
-
-  onTouchMove = e => {
-    if (e.isCoreUI) return
-    for (let i = 0; i < e.changedTouches.length; i++) {
-      const touch = e.changedTouches[i]
-      const info = this.touches.get(touch.identifier)
-      if (!info) continue
-      const currentX = touch.clientX
-      const currentY = touch.clientY
-      info.delta.x += currentX - info.prevPosition.x
-      info.delta.y += currentY - info.prevPosition.y
-      info.position.x = currentX
-      info.position.y = currentY
-      info.prevPosition.x = currentX
-      info.prevPosition.y = currentY
-    }
-  }
-
-  onTouchEnd = e => {
-    if (e.isCoreUI) return
-    for (let i = 0; i < e.changedTouches.length; i++) {
-      const touch = e.changedTouches[i]
-      const info = this.touches.get(touch.identifier)
-      for (const control of this.controls) {
-        const consume = control.options.onTouchEnd?.(info)
-        if (consume) break
-      }
-      this.touches.delete(touch.identifier)
-    }
   }
 
   onResize = () => {
     this.screen.width = this.viewport.offsetWidth
     this.screen.height = this.viewport.offsetHeight
+  }
+
+  onFocus = () => {
+    this.releaseAllButtons()
   }
 
   onBlur = () => {
@@ -621,14 +801,13 @@ export class ClientControls extends System {
     document.removeEventListener('pointerlockchange', this.onPointerLockChange)
     this.viewport.removeEventListener('pointerdown', this.onPointerDown)
     window.removeEventListener('pointermove', this.onPointerMove)
-    this.viewport.removeEventListener('touchstart', this.onTouchStart)
-    this.viewport.removeEventListener('touchmove', this.onTouchMove)
-    this.viewport.removeEventListener('touchend', this.onTouchEnd)
-    this.viewport.removeEventListener('touchcancel', this.onTouchEnd)
     this.viewport.removeEventListener('pointerup', this.onPointerUp)
+    this.viewport.removeEventListener('pointercancel', this.onPointerUp)
     this.viewport.removeEventListener('wheel', this.onScroll, { passive: false })
     document.body.removeEventListener('contextmenu', this.onContextMenu)
+    this.viewport.removeEventListener('touchstart', this.onTouchStart)
     window.removeEventListener('resize', this.onResize)
+    window.removeEventListener('focus', this.onFocus)
     window.removeEventListener('blur', this.onBlur)
   }
 }
@@ -639,6 +818,7 @@ function createButton(controls, control, prop) {
   const released = false
   return {
     $button: true,
+    value: 0, // eg xr triggers
     down,
     pressed,
     released,
@@ -653,6 +833,16 @@ function createVector(controls, control, prop) {
     $vector: true,
     value: new THREE.Vector3(),
     capture: false,
+  }
+}
+
+function createPose(controls, control, prop) {
+  return {
+    $pose: true,
+    position: new THREE.Vector3(),
+    quaternion: new THREE.Quaternion(),
+    // matrix: new THREE.Matrix4(),
+    // capture: false,
   }
 }
 

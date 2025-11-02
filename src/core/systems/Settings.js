@@ -1,4 +1,6 @@
+import { isBoolean } from 'lodash-es'
 import { System } from './System'
+import { Ranks } from '../extras/ranks'
 
 export class Settings extends System {
   constructor(world) {
@@ -6,28 +8,45 @@ export class Settings extends System {
 
     this.title = null
     this.desc = null
-    this.model = null
+    this.image = null
     this.avatar = null
-    this.public = null
+    this.customAvatars = null
+    this.voice = null
+    this.rank = null
     this.playerLimit = null
+    this.ao = null
 
     this.changes = null
+  }
+
+  setHasAdminCode(value) {
+    this.hasAdminCode = value
+  }
+
+  get effectiveRank() {
+    return this.hasAdminCode ? this.rank : Ranks.ADMIN
   }
 
   deserialize(data) {
     this.title = data.title
     this.desc = data.desc
-    this.model = data.model
+    this.image = data.image
     this.avatar = data.avatar
-    this.public = data.public
+    this.customAvatars = data.customAvatars
+    this.voice = data.voice
+    this.rank = data.rank
     this.playerLimit = data.playerLimit
+    this.ao = data.ao
     this.emit('change', {
       title: { value: this.title },
       desc: { value: this.desc },
-      model: { value: this.model },
+      image: { value: this.image },
       avatar: { value: this.avatar },
-      public: { value: this.public },
+      customAvatars: { value: this.customAvatars },
+      voice: { value: this.voice },
+      rank: { value: this.rank },
       playerLimit: { value: this.playerLimit },
+      ao: { value: this.ao },
     })
   }
 
@@ -35,10 +54,13 @@ export class Settings extends System {
     return {
       desc: this.desc,
       title: this.title,
-      model: this.model,
+      image: this.image,
       avatar: this.avatar,
-      public: this.public,
+      customAvatars: this.customAvatars,
+      voice: this.voice,
+      rank: this.rank,
       playerLimit: this.playerLimit,
+      ao: this.ao,
     }
   }
 

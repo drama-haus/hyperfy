@@ -1,4 +1,5 @@
 import { createNode } from './createNode'
+import * as THREE from '../extras/three'
 import CustomShaderMaterial from '../libs/three-custom-shader-material'
 
 const groupTypes = ['Scene', 'Group', 'Object3D']
@@ -50,6 +51,7 @@ export function glbToNodes(glb, world) {
           position: object3d.position.toArray(),
           quaternion: object3d.quaternion.toArray(),
           scale: object3d.scale.toArray(),
+          scaleAware: props.scaleAware,
         })
         parentNode.add(node)
         parse(object3d.children, node)
@@ -79,6 +81,7 @@ export function glbToNodes(glb, world) {
           geometry: object3d.geometry,
           convex: props.convex,
           trigger: props.trigger,
+          layer: props.layer,
           position: object3d.position.toArray(),
           quaternion: object3d.quaternion.toArray(),
           scale: object3d.scale.toArray(),
@@ -88,8 +91,12 @@ export function glbToNodes(glb, world) {
       }
       // Mesh
       else if (object3d.type === 'Mesh') {
+        // experimental splatmaps
+        if (props.exp_splatmap && !world.network.isServer) {
+          setupSplatmap(object3d)
+        }
         // wind effect
-        if (object3d.material.userData.wind) {
+        else if (object3d.material.userData.wind) {
           addWind(object3d, world)
         }
         const hasMorphTargets = object3d.morphTargetDictionary || object3d.morphTargetInfluences?.length > 0
@@ -98,7 +105,7 @@ export function glbToNodes(glb, world) {
           type: 'geometry',
           geometry: object3d.geometry,
           material: object3d.material,
-          linked: !hasMorphTargets,
+          linked: !hasMorphTargets && !object3d.material.transparent,
           castShadow: props.castShadow,
           receiveShadow: props.receiveShadow,
           visible: props.visible, // DEPRECATED: use Node.active
@@ -289,3 +296,97 @@ const snoise = `
                                 dot(p2,x2), dot(p3,x3) ) );
   }
 `
+
+function setupSplatmap(mesh) {
+  /**
+   * TODO
+   * - vertex colors should shade terrain
+   * - use alpha for a 4th texture layer
+   *
+   * NOTES
+   * - blender gltf export doesnt support a complex triplanar splatmap shader
+   *   so we force the splat and rgba textures into random material slots and
+   *   reconstruct them here.
+   */
+  const original = mesh.material
+  if (original.specularIntensityMap) original.specularIntensityMap.colorSpace = THREE.SRGBColorSpace
+  if (original.transmissionMap) original.transmissionMap.colorSpace = THREE.SRGBColorSpace
+  if (original.emissiveMap) original.emissiveMap.colorSpace = THREE.SRGBColorSpace
+  if (original.normalMap) original.normalMap.colorSpace = THREE.SRGBColorSpace
+  const uniforms = {
+    splatTex: { value: original.map },
+    rTex: { value: original.specularIntensityMap },
+    gTex: { value: original.emissiveMap },
+    bTex: { value: original.normalMap },
+    aTex: { value: original.transmissionMap },
+    rScale: { value: mesh.userData.red_scale || 1 },
+    gScale: { value: mesh.userData.green_scale || 1 },
+    bScale: { value: mesh.userData.blue_scale || 1 },
+    aScale: { value: mesh.userData.alpha_scale || 1 },
+  }
+  // if (mesh.geometry.hasAttribute('_color')) {
+  //   terrain.geometry.setAttribute('color', terrain.geometry.attributes._color)
+  //   terrain.geometry.deleteAttribute('_color')
+  //   hasVertexColors = true
+  // }
+  mesh.material = new CustomShaderMaterial({
+    baseMaterial: THREE.MeshStandardMaterial,
+    roughness: 1,
+    metalness: 0,
+    // vertexColors: true,
+    uniforms,
+    vertexShader: `
+      varying vec2 vUv;
+      varying vec3 vNorm;
+      varying vec3 vPos;
+      void main() {
+        vUv = uv;
+        vNorm = normalize(normal);
+        vPos = position;
+      }
+    `,
+    fragmentShader: `
+      uniform sampler2D splatTex;
+      uniform sampler2D rTex;
+      uniform sampler2D gTex;
+      uniform sampler2D bTex;
+      uniform sampler2D aTex;
+      uniform float rScale;
+      uniform float gScale;
+      uniform float bScale;
+      uniform float aScale;
+      varying vec2 vUv;
+      varying vec3 vNorm;
+      varying vec3 vPos;
+
+      vec4 textureTriplanar(sampler2D tex, float scale, vec3 normal, vec3 position) {
+          vec2 uv_x = position.yz * scale;
+          vec2 uv_y = position.xz * scale;
+          vec2 uv_z = position.xy * scale;
+          vec4 xProjection = texture2D(tex, uv_x);
+          vec4 yProjection = texture2D(tex, uv_y);
+          vec4 zProjection = texture2D(tex, uv_z);
+          vec3 weight = abs(normal);
+          weight = pow(weight, vec3(4.0)); // bias towards the major axis
+          weight = weight / (weight.x + weight.y + weight.z);
+          return xProjection * weight.x + yProjection * weight.y + zProjection * weight.z;
+      }
+
+      vec3 tri(sampler2D t, float s) {
+        return textureTriplanar(t, s, vNorm, vPos).rgb;
+      }
+
+      void main() {
+          vec4 splat = texture2D(splatTex, vUv);
+          vec4 result = vec4(0, 0, 0, 1.0);
+          result += splat.r * textureTriplanar(rTex, rScale, vNorm, vPos);
+          result += splat.g * textureTriplanar(gTex, gScale, vNorm, vPos);
+          result += splat.b * textureTriplanar(bTex, bScale, vNorm, vPos);
+          // result += splat.a * textureTriplanar(aTex, aScale, vNorm, vPos);
+          // result += (1.0 - splat.a) * textureTriplanar(aTex, aScale, vNorm, vPos);
+          // result *= vColor;
+          csm_DiffuseColor *= result;
+      }
+    `,
+  })
+}

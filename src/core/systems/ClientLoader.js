@@ -60,10 +60,19 @@ export class ClientLoader extends System {
   }
 
   execPreload() {
-    const promises = this.preloadItems.map(item => this.load(item.type, item.url))
+    let loadedItems = 0
+    let totalItems = this.preloadItems.length
+    let progress = 0
+    const promises = this.preloadItems.map(item => {
+      return this.load(item.type, item.url).then(() => {
+        loadedItems++
+        progress = (loadedItems / totalItems) * 100
+        this.world.emit('progress', progress)
+      })
+    })
     this.preloader = Promise.allSettled(promises).then(() => {
       this.preloader = null
-      this.world.emit('ready', true)
+      // this.world.emit('ready', true)
     })
   }
 
@@ -71,16 +80,22 @@ export class ClientLoader extends System {
     this.files.set(url, file)
   }
 
+  hasFile(url) {
+    url = this.world.resolveURL(url)
+    return this.files.has(url)
+  }
+
   getFile(url, name) {
     url = this.world.resolveURL(url)
+    const file = this.files.get(url)
+    if (!file) return null
     if (name) {
-      const file = this.files.get(url)
       return new File([file], name, {
         type: file.type, // Preserve the MIME type
         lastModified: file.lastModified, // Preserve the last modified timestamp
       })
     }
-    return this.files.get(url)
+    return file
   }
 
   loadFile = async url => {
@@ -144,6 +159,7 @@ export class ClientLoader extends System {
           const img = new Image()
           img.onload = () => {
             const texture = this.texLoader.load(img.src)
+            texture.colorSpace = THREE.SRGBColorSpace
             this.results.set(key, texture)
             resolve(texture)
             URL.revokeObjectURL(img.src)

@@ -1,5 +1,7 @@
+import { isBoolean } from 'lodash-es'
 import { ControlPriorities } from '../extras/ControlPriorities'
 import { System } from './System'
+import { thickness } from 'three/src/nodes/TSL.js'
 
 const appPanes = ['app', 'script', 'nodes', 'meta']
 
@@ -11,6 +13,7 @@ export class ClientUI extends System {
       active: false,
       app: null,
       pane: null,
+      reticleSuppressors: 0,
     }
     this.lastAppPane = 'app'
     this.control = null
@@ -64,10 +67,44 @@ export class ClientUI extends System {
     this.broadcast()
   }
 
+  toggleVisible(value) {
+    value = isBoolean(value) ? value : !this.state.visible
+    if (this.state.visible === value) return
+    this.state.visible = value
+    this.broadcast()
+  }
+
   setApp(app) {
     this.state.app = app
     this.state.pane = app ? this.lastAppPane : null
     this.broadcast()
+  }
+
+  suppressReticle() {
+    this.state.reticleSuppressors++
+    let released
+    this.broadcast()
+    return () => {
+      if (released) return
+      this.state.reticleSuppressors--
+      this.broadcast()
+      released = true
+    }
+  }
+
+  confirm(options) {
+    const promise = new Promise(resolve => {
+      options.confirm = () => {
+        this.world.emit('confirm', null)
+        resolve(true)
+      }
+      options.cancel = () => {
+        this.world.emit('confirm', null)
+        resolve(false)
+      }
+    })
+    this.world.emit('confirm', options)
+    return promise
   }
 
   broadcast() {

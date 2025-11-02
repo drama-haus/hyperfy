@@ -3,8 +3,19 @@ import * as THREE from 'three'
 import { System } from './System'
 import { ControlPriorities } from '../extras/ControlPriorities'
 import { isTouch } from '../../client/utils'
+import { clamp } from '../utils'
 
 const BATCH_SIZE = 500
+const FORWARD = new THREE.Vector3(0, 0, 1)
+
+const v1 = new THREE.Vector3()
+const v2 = new THREE.Vector3()
+const v3 = new THREE.Vector3()
+const v4 = new THREE.Vector3()
+const v5 = new THREE.Vector3()
+const q1 = new THREE.Quaternion()
+const e1 = new THREE.Euler(0, 0, 0, 'YXZ')
+const m1 = new THREE.Matrix4()
 
 export class ClientActions extends System {
   constructor(world) {
@@ -42,7 +53,11 @@ export class ClientActions extends System {
   update(delta) {
     const cameraPos = this.world.rig.position
 
-    this.btnDown = this.control.keyE.down || this.control.touchB.down
+    this.btnDown =
+      this.control.keyE.down ||
+      this.control.touchB.down ||
+      this.control.xrLeftTrigger.down ||
+      this.control.xrRightTrigger.down
 
     // clear current action if its no longer in distance
     if (this.current.node) {
@@ -101,8 +116,8 @@ function createAction(world) {
     const pillWidth = 6 + 4 + 24 + 4 + 6 + 9 + text.width + 13
     const left = (widthPx - pillWidth) / 2
     board.clear()
-    board.drawBox(left, 0, pillWidth, heightPx, heightPx / 2, '#000000')
-    board.drawPie(left + 6, 6, 16, 100, '#484848') // grey
+    board.drawBox(left, 0, pillWidth, heightPx, heightPx / 2, 'rgba(11, 10, 21, 0.97)')
+    board.drawPie(left + 6, 6, 16, 100, '#5d6077') // grey
     board.drawPie(left + 6, 6, 16, ratio * 100, '#ffffff') // white
     board.drawCircle(left + 10, 10, 12, '#000000') // inner
     if (!isTouch) board.drawText(left + 16, 14, 'E', '#ffffff', 18, 400) // E
@@ -122,7 +137,7 @@ function createAction(world) {
 
   return {
     start(_node) {
-      if (node) console.error('erm node already set')
+      // if (node) console.error('erm node already set')
       node = _node
       world.actions.btnDown = false
       node.progress = 0
@@ -131,9 +146,37 @@ function createAction(world) {
     },
     update(delta) {
       if (!node) return
-      mesh.position.setFromMatrixPosition(node.matrixWorld)
-      mesh.quaternion.setFromRotationMatrix(world.camera.matrixWorld)
-      world.graphics.scaleUI(mesh, heightPx, pxToMeters)
+      let distance
+      if (world.xr.session) {
+        const pos = v1
+        const qua = q1
+        const sca = v2
+        node.matrixWorld.decompose(pos, qua, sca)
+        const camPosition = v3.setFromMatrixPosition(world.xr.camera.matrixWorld)
+        distance = camPosition.distanceTo(pos)
+        v4.subVectors(camPosition, pos).normalize()
+        qua.setFromUnitVectors(FORWARD, v4)
+        e1.setFromQuaternion(qua)
+        e1.z = 0
+        qua.setFromEuler(e1)
+        mesh.position.copy(pos)
+        mesh.quaternion.copy(qua)
+        mesh.scale.copy(sca)
+      } else {
+        const camPosition = v3.setFromMatrixPosition(world.camera.matrixWorld)
+        mesh.position.setFromMatrixPosition(node.matrixWorld)
+        distance = camPosition.distanceTo(mesh.position)
+        mesh.quaternion.setFromRotationMatrix(world.camera.matrixWorld)
+      }
+      const worldToScreenFactor = world.graphics.worldToScreenFactor
+      const [minDistance, maxDistance, baseScale = 1] = [3, 5, 1]
+      const clampedDistance = clamp(distance, minDistance, maxDistance)
+      // calculate scale factor based on the distance
+      // When distance is at min, scale is 1.0 (or some other base scale)
+      // When distance is at max, scale adjusts proportionally
+      let scaleFactor = baseScale * (worldToScreenFactor * clampedDistance) * 100
+      if (world.xr.session) scaleFactor *= 0.2 // shrink because its HUGE in VR
+      mesh.scale.setScalar(scaleFactor)
       if (world.actions.btnDown) {
         if (node.progress === 0) {
           cancelled = false

@@ -1,14 +1,22 @@
+import { isBoolean } from 'lodash-es'
 import * as THREE from '../extras/three'
 
 import { getRef, Node } from './Node'
 
 const v0 = new THREE.Vector3()
 const v1 = new THREE.Vector3()
+const v2 = new THREE.Vector3()
+
+const defaults = {
+  scaleAware: true,
+}
 
 export class LOD extends Node {
   constructor(data = {}) {
     super(data)
     this.name = 'lod'
+
+    this.scaleAware = data.scaleAware
 
     this.lods = [] // [...{ node, maxDistance }]
   }
@@ -32,7 +40,12 @@ export class LOD extends Node {
     }
     const cameraPos = v0.setFromMatrixPosition(this.ctx.world.camera.matrixWorld)
     const itemPos = v1.setFromMatrixPosition(this.matrixWorld)
-    const distance = cameraPos.distanceTo(itemPos)
+    let distance = cameraPos.distanceTo(itemPos)
+    if (this._scaleAware) {
+      v2.setFromMatrixScale(this.matrixWorld)
+      const avgScale = (v2.x + v2.y + v2.z) / 3
+      distance = distance / avgScale
+    }
     const lod = this.lods.find(lod => distance <= lod.maxDistance)
     // if this lod hasnt change, stop here
     if (this.lod === lod) return
@@ -54,6 +67,7 @@ export class LOD extends Node {
 
   copy(source, recursive) {
     super.copy(source, recursive)
+    this._scaleAware = source._scaleAware
     this.lods = source.lods.map(lod => {
       const node = this.children.find(node => node.id === lod.node.id)
       node.active = false
@@ -66,10 +80,28 @@ export class LOD extends Node {
     return this
   }
 
+  get scaleAware() {
+    return this._scaleAware
+  }
+
+  set scaleAware(value = defaults.scaleAware) {
+    if (!isBoolean(value)) {
+      throw new Error('[lod] scaleAware not a boolean')
+    }
+    if (this._scaleAware === value) return
+    this._scaleAware = value
+  }
+
   getProxy() {
     if (!this.proxy) {
       const self = this
       let proxy = {
+        get scaleAware() {
+          return self.scaleAware
+        },
+        set scaleAware(value) {
+          self.scaleAware = value
+        },
         insert(pNode, maxDistance) {
           const node = getRef(pNode)
           self.insert(node, maxDistance)

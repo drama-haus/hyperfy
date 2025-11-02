@@ -13,14 +13,22 @@ export function Client({ wsUrl, onSetup }) {
   const viewportRef = useRef()
   const uiRef = useRef()
   const world = useMemo(() => createClientWorld(), [])
+  const [ui, setUI] = useState(world.ui.state)
+  useEffect(() => {
+    world.on('ui', setUI)
+    return () => {
+      world.off('ui', setUI)
+    }
+  }, [])
   useEffect(() => {
     const init = async () => {
       const viewport = viewportRef.current
       const ui = uiRef.current
       const baseEnvironment = {
         model: '/base-environment.glb',
-        bg: '/day2-2k.jpg',
-        hdr: '/day2.hdr',
+        bg: null, // '/day2-2k.jpg',
+        hdr: '/Clear_08_4pm_LDR.hdr',
+        rotationY: 0,
         sunDirection: new THREE.Vector3(-1, -2, -2).normalize(),
         sunIntensity: 1,
         sunColor: 0xffffff,
@@ -38,6 +46,7 @@ export function Client({ wsUrl, onSetup }) {
     }
     init()
   }, [])
+
   return (
     <div
       className='App'
@@ -57,6 +66,7 @@ export function Client({ wsUrl, onSetup }) {
           inset: 0;
           pointer-events: none;
           user-select: none;
+          display: ${ui.visible ? 'block' : 'none'};
         }
       `}
     >

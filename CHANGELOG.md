@@ -13,6 +13,120 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+## [v0.15.0]
+
+### Added
+- core: improved chat UX on mobile
+- core: new smooth movement animations and locomotion
+- core: introduce gaze based head tracking
+- core: add voice chat options to world menu (disabled, spatial, or global)
+- core: player list menu + builder toggle, teleport, mute/unmute and kick moderation tools
+- core: add option to allow visitors to equip custom avatars (vrm)
+- core: new backup script for automated world backups
+- apps: file field shortcuts (eg `type:image` instead of `type:file kind:image`)
+
+### Changed
+- core: touch and ui pointer handling improvements
+- core: avatar distance based rate now amortized and faster
+- core: script window now scales with UI scale setting
+- core: show app name in script window for brevity
+- core: buffered interpolation of networked players to reduce jitter
+- apps: calling world.chat(msg) automatically assigns `id` and `createdAt` values if not provided
+- docs: restructure and improvements
+
+### Fixed
+- core: nametag transparency ordering issues
+- core: dont show free-build toggle 
+- apps: UIImage explicit width and height
+- apps: touch device pointer coordinates incorrect
+- apps: fix particles orbital velocity in local space
+
+## [v0.14.0]
+
+### Added
+- core: ambient occlusion
+- core: new scene app format
+- core: touch device joystick UI
+- core: new camera-facing character controls
+- core: first-person support
+- apps: ability to read/write browser url params
+- apps: ability to make avatar nodes invisible (.visible)
+
+### Changed
+- core: apps list updates when others add/remove apps
+- core: reduced reticle size
+- core: fog is now radial distance based
+- core: don't preload apps that are disabled
+- core: sleeker sidebar UI
+
+### Fixed
+- core: shift clicking file fields to download
+- core: fix weird transparency ordering issues
+- core: improve touch device chat UX
+
+## [v0.13.0]
+
+### Added
+- core: new loading screen and world image settings
+- core: open graph tag support + add to homescreen
+- core: vr controller interaction button support
+- core: experimental terrain (splatmaps) support
+- core: show reconnect button when disconnected
+- apps: support control.hideReticle() useful for vehicles etc
+
+### Changed
+- core: reduce default shadow quality on mobile/vr devices
+- core: Z toggles all UI including apps
+- core: reduced docker image size using multi-stage builds
+- core: skysphere only move with player horizontally, not vertically
+- core: increase mobile joystick threshold for running
+- core: improved vr billboarding to look more natural
+- core: update action button ui to match core ui
+- core: only apply emote throttling to remote players, local players now 60fps
+- core: set vr target framerate to 72Hz
+- core: more accurately detect touch devices
+- apps: mesh.visible disables render but maintains raycastability
+
+### Fixed
+- core: reduce minimum vrm height to support smaller avatars
+- apps: skinnedmesh bone handle remounting
+
+## [v0.12.0]
+
+### Added
+- core: add toggle to completely disable an app but keep it in the world
+- core: add scale gizmo (3)
+- core: add shift to scale in build mode
+- core: add ui v3
+- core: add initial app collection
+- core: node-client support for running the client in a nodejs environment
+- apps: experimental app.keepActive=true to keep apps executing while being moved
+- apps: add audio.setPlaybackRate to control pitch
+- apps: add image node
+- apps: add `pivot` option to video node
+- apps: add video.onLoad, video.loading, video.time, video.duration properties
+- apps: inject `prng` utility
+- apps: add material.fog option to allow meshes to opt-out of being effected by fog (eg skyboxes)
+- apps: add skinnedmesh.getBone(name) with ability to read AND write bone transforms
+- apps: add lod.scaleAware property (enabled by default)
+- misc: simple blender addon
+
+### Changed
+- core: improve audio smoothing, less crackle
+- core: cache and reuse physics materials, reduces memory usage
+- core: reinstate production builds, shave off ~5MB of bundle size
+- core: move stats to top right of screen
+- apps: support bigStep option on number props (shift + up/down in input)
+
+### Fixed
+- core: correct video color space
+- core: prevent chat opening up when hitting enter in an app prop input
+- core: fix edge case where colliders cannot be generated for some meshes
+- core: fix shift-click file props to download not working
+- core: fix ctrl+R to reload the page duplicating objects when in build mode
+- core: remove docker exit 0 hack and correctly exit during builds
+- apps: fix initial lod not being set correctly when cloning
+
 ## [v0.11.0]
 
 ### Added
@@ -35,7 +149,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - core: when anchored, player capsule physics are now disabled
 - core: fix audio not unlocks on meta quest 3
 - core: decrease default shadow setting on mobile from high to medium
-- 
 
 ### Fixed
 - core: fix environment model not loading/simulating on server
@@ -351,7 +464,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Basic project structure
 - Core functionality from original project
 
-[Unreleased]: https://github.com/hyperfy-xyz/hyperfy/compare/v0.11.0...HEAD
+[Unreleased]: https://github.com/hyperfy-xyz/hyperfy/compare/v0.15.0...HEAD
+[0.15.0]: https://github.com/hyperfy-xyz/hyperfy/compare/v0.14.0...v0.15.0
+[0.14.0]: https://github.com/hyperfy-xyz/hyperfy/compare/v0.13.0...v0.14.0
+[0.13.0]: https://github.com/hyperfy-xyz/hyperfy/compare/v0.12.0...v0.13.0
+[0.12.0]: https://github.com/hyperfy-xyz/hyperfy/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/hyperfy-xyz/hyperfy/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/hyperfy-xyz/hyperfy/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/hyperfy-xyz/hyperfy/compare/v0.8.1...v0.9.0

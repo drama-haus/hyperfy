@@ -18,9 +18,12 @@ export class Chat extends System {
     super(world)
     this.msgs = []
     this.listeners = new Set()
+    this.commands = {} // cmd -> Function
   }
 
   add(msg, broadcast) {
+    if (!msg.id) msg.id = uuid()
+    if (!msg.createdAt) moment().toISOString()
     // add to chat messages
     this.msgs = [...this.msgs, msg]
     if (this.msgs.length > CHAT_MAX_MESSAGES) {
@@ -45,19 +48,21 @@ export class Chat extends System {
   command(text) {
     if (this.world.network.isServer) return
     const playerId = this.world.network.id
-    const args = text
+    const cmd = text.slice(1).split(' ')[0] // "/foo bar" -> "foo"
+    const value = text.slice(1 + cmd.length + 1) // "/foo bar" -> "bar"
+    const args = text // "/foo bar" -> ["foo", "bar"]
       .slice(1)
       .split(' ')
       .map(str => str.trim())
       .filter(str => !!str)
-    const isAdminCommand = args[0] === 'admin'
-    if (args[0] === 'stats') {
-      this.world.prefs.setStats(!this.world.prefs.stats)
+    const callback = this.commands[cmd]
+    if (callback) {
+      return callback({ playerId, cmd, value, args })
     }
-    if (!isAdminCommand) {
-      this.world.events.emit('command', { playerId, args })
+    if (cmd !== 'admin') {
+      this.world.events.emit('command', { playerId, cmd, value, args })
     }
-    this.world.network.send('command', args)
+    this.world.network.send('command', { cmd, value, args })
   }
 
   clear(broadcast) {
@@ -102,6 +107,10 @@ export class Chat extends System {
     return () => {
       this.listeners.delete(callback)
     }
+  }
+
+  bindCommand(cmd, callback) {
+    this.commands[cmd] = callback
   }
 
   destroy() {

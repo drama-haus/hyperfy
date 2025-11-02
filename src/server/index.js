@@ -4,7 +4,6 @@ import './bootstrap'
 
 import fs from 'fs-extra'
 import path from 'path'
-import { pipeline } from 'stream/promises'
 import Fastify from 'fastify'
 import ws from '@fastify/websocket'
 import cors from '@fastify/cors'
@@ -13,51 +12,98 @@ import statics from '@fastify/static'
 import multipart from '@fastify/multipart'
 
 import { createServerWorld } from '../core/createServerWorld'
-import { hashFile } from '../core/utils-server'
 import { getDB } from './db'
 import { Storage } from './Storage'
-import { initCollections } from './collections'
+import { assets } from './assets'
+import { collections } from './collections'
+import { cleaner } from './cleaner'
 
 const rootDir = path.join(__dirname, '../')
 const worldDir = path.join(rootDir, process.env.WORLD)
-const assetsDir = path.join(worldDir, '/assets')
-const collectionsDir = path.join(worldDir, '/collections')
 const port = process.env.PORT
 
-// create world folders if needed
-await fs.ensureDir(worldDir)
-await fs.ensureDir(assetsDir)
-await fs.ensureDir(collectionsDir)
+// check envs
+if (!process.env.WORLD) {
+  throw new Error('[envs] WORLD not set')
+}
+if (!process.env.PORT) {
+  throw new Error('[envs] PORT not set')
+}
+if (!process.env.JWT_SECRET) {
+  throw new Error('[envs] JWT_SECRET not set')
+}
+if (!process.env.ADMIN_CODE) {
+  console.warn('[envs] ADMIN_CODE not set - all users will have admin permissions!')
+}
+if (!process.env.SAVE_INTERVAL) {
+  throw new Error('[envs] SAVE_INTERVAL not set')
+}
+if (!process.env.PUBLIC_MAX_UPLOAD_SIZE) {
+  throw new Error('[envs] PUBLIC_MAX_UPLOAD_SIZE not set')
+}
+if (!process.env.PUBLIC_WS_URL) {
+  throw new Error('[envs] PUBLIC_WS_URL not set')
+}
+if (!process.env.PUBLIC_WS_URL.startsWith('ws')) {
+  throw new Error('[envs] PUBLIC_WS_URL must start with ws:// or wss://')
+}
+if (!process.env.PUBLIC_API_URL) {
+  throw new Error('[envs] PUBLIC_API_URL must be set')
+}
+if (!process.env.ASSETS) {
+  throw new Error(`[envs] ASSETS must be set to 'local' or 's3'`)
+}
+if (!process.env.ASSETS_BASE_URL) {
+  throw new Error(`[envs] ASSETS_BASE_URL must be set`)
+}
+if (process.env.ASSETS === 's3' && !process.env.ASSETS_S3_URI) {
+  throw new Error(`[envs] ASSETS_S3_URI must be set when using ASSETS=s3`)
+}
 
-// copy over built-in assets and collections
-await fs.copy(path.join(rootDir, 'src/world/assets'), path.join(assetsDir))
-await fs.copy(path.join(rootDir, 'src/world/collections'), path.join(collectionsDir))
+const fastify = Fastify({ logger: { level: 'error' } })
+
+// create world folder if needed
+await fs.ensureDir(worldDir)
+
+// init assets
+await assets.init({ rootDir, worldDir })
 
 // init collections
-const collections = await initCollections({ collectionsDir, assetsDir })
+await collections.init({ rootDir, worldDir })
 
 // init db
-const db = await getDB(path.join(worldDir, '/db.sqlite'))
+const db = await getDB({ worldDir })
+
+// init cleaner
+await cleaner.init({ db })
 
 // init storage
 const storage = new Storage(path.join(worldDir, '/storage.json'))
 
 // create world
 const world = createServerWorld()
-world.collections.deserialize(collections)
-world.init({ db, storage, assetsDir })
-
-const fastify = Fastify({ logger: { level: 'error' } })
+await world.init({
+  assetsDir: assets.dir,
+  assetsUrl: assets.url,
+  db,
+  assets,
+  storage,
+  collections: collections.list,
+})
 
 fastify.register(cors)
 fastify.register(compress)
 fastify.get('/', async (req, reply) => {
   const title = world.settings.title || 'World'
   const desc = world.settings.desc || ''
+  const image = world.resolveURL(world.settings.image?.url) || ''
+  const url = process.env.ASSETS_BASE_URL
   const filePath = path.join(__dirname, 'public', 'index.html')
   let html = fs.readFileSync(filePath, 'utf-8')
+  html = html.replaceAll('{url}', url)
   html = html.replaceAll('{title}', title)
   html = html.replaceAll('{desc}', desc)
+  html = html.replaceAll('{image}', image)
   reply.type('text/html').send(html)
 })
 fastify.register(statics, {
@@ -70,19 +116,21 @@ fastify.register(statics, {
     res.setHeader('Expires', '0')
   },
 })
-fastify.register(statics, {
-  root: assetsDir,
-  prefix: '/assets/',
-  decorateReply: false,
-  setHeaders: res => {
-    // all assets are hashed & immutable so we can use aggressive caching
-    res.setHeader('Cache-Control', 'public, max-age=31536000, immutable') // 1 year
-    res.setHeader('Expires', new Date(Date.now() + 31536000000).toUTCString()) // older browsers
-  },
-})
+if (world.assetsDir) {
+  fastify.register(statics, {
+    root: world.assetsDir,
+    prefix: '/assets/',
+    decorateReply: false,
+    setHeaders: res => {
+      // all assets are hashed & immutable so we can use aggressive caching
+      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable') // 1 year
+      res.setHeader('Expires', new Date(Date.now() + 31536000000).toUTCString()) // older browsers
+    },
+  })
+}
 fastify.register(multipart, {
   limits: {
-    fileSize: 100 * 1024 * 1024, // 100MB
+    fileSize: 200 * 1024 * 1024, // 200MB
   },
 })
 fastify.register(ws)
@@ -104,31 +152,23 @@ fastify.get('/env.js', async (req, reply) => {
 })
 
 fastify.post('/api/upload', async (req, reply) => {
-  // console.log('DEBUG: slow uploads')
-  // await new Promise(resolve => setTimeout(resolve, 2000))
-  const file = await req.file()
-  const ext = file.filename.split('.').pop().toLowerCase()
-  // create temp buffer to store contents
+  const mp = await req.file()
+  // collect into buffer
   const chunks = []
-  for await (const chunk of file.file) {
+  for await (const chunk of mp.file) {
     chunks.push(chunk)
   }
   const buffer = Buffer.concat(chunks)
-  // hash from buffer
-  const hash = await hashFile(buffer)
-  const filename = `${hash}.${ext}`
-  // save to fs
-  const filePath = path.join(assetsDir, filename)
-  const exists = await fs.exists(filePath)
-  if (!exists) {
-    await fs.writeFile(filePath, buffer)
-  }
+  // convert to file
+  const file = new File([buffer], mp.filename, {
+    type: mp.mimetype || 'application/octet-stream',
+  })
+  // upload
+  await assets.upload(file)
 })
 
 fastify.get('/api/upload-check', async (req, reply) => {
-  const filename = req.query.filename
-  const filePath = path.join(assetsDir, filename)
-  const exists = await fs.exists(filePath)
+  const exists = await assets.exists(req.query.filename)
   return { exists }
 })
 
@@ -162,7 +202,7 @@ fastify.get('/status', async (request, reply) => {
     for (const socket of world.network.sockets.values()) {
       status.connectedUsers.push({
         id: socket.player.data.userId,
-        position: socket.player.position.current.toArray(),
+        position: socket.player.position.value.toArray(),
         name: socket.player.data.name,
       })
     }
@@ -196,7 +236,7 @@ async function worldNetwork(fastify) {
   })
 }
 
-console.log(`running on port ${port}`)
+console.log(`server listening on port ${port}`)
 
 // Graceful shutdown
 process.on('SIGINT', async () => {

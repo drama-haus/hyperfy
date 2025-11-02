@@ -8,6 +8,8 @@ import { Layers } from '../extras/Layers'
 import { ControlPriorities } from '../extras/ControlPriorities'
 import { warn } from '../extras/warn'
 
+const isBrowser = typeof window !== 'undefined'
+
 const internalEvents = [
   'fixedUpdate',
   'updated',
@@ -213,6 +215,32 @@ export class Apps extends System {
           }
         })
       },
+      getQueryParam(entity, key) {
+        if (!isBrowser) {
+          console.error('getQueryParam() must be called in the browser')
+          return null
+        }
+        const urlParams = new URLSearchParams(window.location.search)
+        return urlParams.get(key)
+      },
+      setQueryParam(entity, key, value) {
+        if (!isBrowser) {
+          console.error('getQueryParam() must be called in the browser')
+          return null
+        }
+        const urlParams = new URLSearchParams(window.location.search)
+        if (value) {
+          urlParams.set(key, value)
+        } else {
+          urlParams.delete(key)
+        }
+        const newUrl = window.location.pathname + '?' + urlParams.toString()
+        window.history.replaceState({}, '', newUrl)
+      },
+      evm() {
+        const { world: _, ...evm } = world.evm
+        return evm
+      },
     }
   }
 
@@ -238,16 +266,19 @@ export class Apps extends System {
         // deprecated. will be removed
         return entity.blueprint.props
       },
-      keepActive(entity) {
-        return entity.keepActive
+      resetOnMove(entity) {
+        return entity.resetOnMove
+      },
+      isMoving(entity) {
+        return entity.mode === 'moving'
       },
     }
     this.appSetters = {
       state(entity, value) {
         entity.data.state = value
       },
-      keepActive(entity, value) {
-        entity.keepActive = value
+      resetOnMove(entity, value) {
+        entity.resetOnMove = value
       },
     }
     this.appMethods = {
@@ -307,9 +338,11 @@ export class Apps extends System {
         if (!isArray(entity.fields)) {
           entity.fields = []
         }
-        // apply any initial values
         const props = entity.blueprint.props
         for (const field of entity.fields) {
+          // apply file shortcuts
+          fileRemaps[field.type]?.(field)
+          // apply any initial values
           if (field.initial !== undefined && props[field.key] === undefined) {
             props[field.key] = field.initial
           }
@@ -353,4 +386,39 @@ export class Apps extends System {
       }
     }
   }
+}
+
+export const fileRemaps = {
+  avatar: field => {
+    field.type = 'file'
+    field.kind = 'avatar'
+  },
+  emote: field => {
+    field.type = 'file'
+    field.kind = 'emote'
+  },
+  model: field => {
+    field.type = 'file'
+    field.kind = 'model'
+  },
+  texture: field => {
+    field.type = 'file'
+    field.kind = 'texture'
+  },
+  image: field => {
+    field.type = 'file'
+    field.kind = 'image'
+  },
+  video: field => {
+    field.type = 'file'
+    field.kind = 'video'
+  },
+  hdr: field => {
+    field.type = 'file'
+    field.kind = 'hdr'
+  },
+  audio: field => {
+    field.type = 'file'
+    field.kind = 'audio'
+  },
 }

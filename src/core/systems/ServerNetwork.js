@@ -1,14 +1,15 @@
 import moment from 'moment'
 import { writePacket } from '../packets'
 import { Socket } from '../Socket'
-import { addRole, hasRole, removeRole, serializeRoles, uuid } from '../utils'
+import { uuid } from '../utils'
 import { System } from './System'
 import { createJWT, readJWT } from '../utils-server'
 import { cloneDeep, isNumber } from 'lodash-es'
 import * as THREE from '../extras/three'
+import { Ranks } from '../extras/ranks'
 
 const SAVE_INTERVAL = parseInt(process.env.SAVE_INTERVAL || '60') // seconds
-const PING_RATE = 1 // seconds
+const PING_RATE = 10 // seconds
 const defaultSpawn = '{ "position": [0, 0, 0], "quaternion": [0, 0, 0, 1] }'
 
 const HEALTH_MAX = 100
@@ -60,6 +61,7 @@ export class ServerNetwork extends System {
     try {
       const settings = JSON.parse(settingsRow?.value || '{}')
       this.world.settings.deserialize(settings)
+      this.world.settings.setHasAdminCode(!!process.env.ADMIN_CODE)
     } catch (err) {
       console.error(err)
     }
@@ -69,8 +71,6 @@ export class ServerNetwork extends System {
     if (SAVE_INTERVAL) {
       this.saveTimerId = setTimeout(this.save, SAVE_INTERVAL * 1000)
     }
-    // load environment model
-    await this.world.environment.updateModel()
   }
 
   preFixedUpdate() {
@@ -206,14 +206,6 @@ export class ServerNetwork extends System {
       })
   }
 
-  isAdmin(player) {
-    return hasRole(player.data.roles, 'admin')
-  }
-
-  isBuilder(player) {
-    return this.world.settings.public || this.isAdmin(player)
-  }
-
   async onConnection(ws, params) {
     try {
       // check player limit
@@ -221,7 +213,7 @@ export class ServerNetwork extends System {
       if (isNumber(playerLimit) && playerLimit > 0 && this.sockets.size >= playerLimit) {
         const packet = writePacket('kick', 'player_limit')
         ws.send(packet)
-        ws.disconnect()
+        ws.close()
         return
       }
 
@@ -245,30 +237,23 @@ export class ServerNetwork extends System {
           id: uuid(),
           name: 'Anonymous',
           avatar: null,
-          roles: '',
+          rank: 0,
           createdAt: moment().toISOString(),
         }
         await this.db('users').insert(user)
         authToken = await createJWT({ userId: user.id })
       }
-      user.roles = user.roles.split(',')
 
       // disconnect if user already in this world
       if (this.sockets.has(user.id)) {
         const packet = writePacket('kick', 'duplicate_user')
         ws.send(packet)
-        ws.disconnect()
+        ws.close()
         return
       }
 
-      // if there is no admin code, everyone is a temporary admin (eg for local dev)
-      // all roles prefixed with `~` are temporary and not persisted to db
-      if (!process.env.ADMIN_CODE) {
-        user.roles.push('~admin')
-      }
-
       // livekit options
-      const livekit = await this.world.livekit.getPlayerOpts(user.id)
+      const livekit = await this.world.livekit.serialize(user.id)
 
       // create socket
       const socket = new Socket({ id: user.id, ws, network: this })
@@ -286,7 +271,8 @@ export class ServerNetwork extends System {
           health: HEALTH_MAX,
           avatar: user.avatar || this.world.settings.avatar?.url || 'asset://avatar.vrm',
           sessionAvatar: avatar || null,
-          roles: user.roles,
+          rank: user.rank,
+          enteredAt: Date.now(),
         },
         true
       )
@@ -295,16 +281,18 @@ export class ServerNetwork extends System {
       socket.send('snapshot', {
         id: socket.id,
         serverTime: performance.now(),
-        assetsUrl: process.env.PUBLIC_ASSETS_URL,
+        assetsUrl: process.env.ASSETS_BASE_URL,
         apiUrl: process.env.PUBLIC_API_URL,
         maxUploadSize: process.env.PUBLIC_MAX_UPLOAD_SIZE,
         collections: this.world.collections.serialize(),
         settings: this.world.settings.serialize(),
         chat: this.world.chat.serialize(),
+        ai: this.world.ai.serialize(),
         blueprints: this.world.blueprints.serialize(),
         entities: this.world.entities.serialize(),
         livekit,
         authToken,
+        hasAdminCode: !!process.env.ADMIN_CODE,
       })
 
       this.sockets.set(socket.id, socket)
@@ -322,8 +310,8 @@ export class ServerNetwork extends System {
     this.send('chatAdded', msg, socket.id)
   }
 
-  onCommand = async (socket, args) => {
-    // TODO: check for spoofed messages, permissions/roles etc
+  onCommand = async (socket, data) => {
+    const { args } = data
     // handle slash commands
     const player = socket.player
     const playerId = player.data.id
@@ -334,25 +322,23 @@ export class ServerNetwork extends System {
       if (process.env.ADMIN_CODE && process.env.ADMIN_CODE === code) {
         const id = player.data.id
         const userId = player.data.userId
-        const roles = player.data.roles
-        const granting = !hasRole(roles, 'admin')
-        if (granting) {
-          addRole(roles, 'admin')
+        const granted = !player.isAdmin()
+        let rank
+        if (granted) {
+          rank = Ranks.ADMIN
         } else {
-          removeRole(roles, 'admin')
+          rank = Ranks.VISITOR
         }
-        player.modify({ roles })
-        this.send('entityModified', { id, roles })
+        player.modify({ rank })
+        this.send('entityModified', { id, rank })
         socket.send('chatAdded', {
           id: uuid(),
           from: null,
           fromId: null,
-          body: granting ? 'Admin granted!' : 'Admin revoked!',
+          body: granted ? 'Admin granted!' : 'Admin revoked!',
           createdAt: moment().toISOString(),
         })
-        await this.db('users')
-          .where('id', userId)
-          .update({ roles: serializeRoles(roles) })
+        await this.db('users').where('id', userId).update({ rank })
       }
     }
     if (cmd === 'name') {
@@ -379,8 +365,27 @@ export class ServerNetwork extends System {
     }
     if (cmd === 'chat') {
       const op = arg1
-      if (op === 'clear' && this.isBuilder(socket.player)) {
+      if (op === 'clear' && socket.player.isBuilder()) {
         this.world.chat.clear(true)
+      }
+    }
+    if (cmd === 'server') {
+      const op = arg1
+      if (op === 'stats') {
+        function send(body) {
+          socket.send('chatAdded', {
+            id: uuid(),
+            from: null,
+            fromId: null,
+            body,
+            createdAt: moment().toISOString(),
+          })
+        }
+        const stats = await this.world.monitor.getStats()
+        send(`CPU: ${stats.currentCPU.toFixed(3)}%`)
+        send(
+          `Memory: ${stats.currentMemory} / ${stats.maxMemory} MB (${((stats.currentMemory / stats.maxMemory) * 100).toFixed(1)}%)`
+        )
       }
     }
     // emit event for all except admin
@@ -389,8 +394,42 @@ export class ServerNetwork extends System {
     }
   }
 
+  onModifyRank = async (socket, data) => {
+    if (!socket.player.isAdmin()) return
+    const { playerId, rank } = data
+    if (!playerId) return
+    if (!isNumber(rank)) return
+    const player = this.world.entities.get(playerId)
+    if (!player || !player.isPlayer) return
+    player.modify({ rank })
+    this.send('entityModified', { id: playerId, rank })
+    await this.db('users').where('id', playerId).update({ rank })
+  }
+
+  onKick = (socket, playerId) => {
+    const player = this.world.entities.get(playerId)
+    if (!player) return
+    // admins can kick builders + visitors
+    // builders can kick visitors
+    // visitors cannot kick anyone
+    if (socket.player.data.rank <= player.data.rank) return
+    const tSocket = this.sockets.get(playerId)
+    tSocket.send('kick', 'moderation')
+    tSocket.disconnect()
+  }
+
+  onMute = (socket, data) => {
+    const player = this.world.entities.get(data.playerId)
+    if (!player) return
+    // admins can mute builders + visitors
+    // builders can mute visitors
+    // visitors cannot mute anyone
+    if (socket.player.data.rank <= player.data.rank) return
+    this.world.livekit.setMuted(data.playerId, data.muted)
+  }
+
   onBlueprintAdded = (socket, blueprint) => {
-    if (!this.isBuilder(socket.player)) {
+    if (!socket.player.isBuilder()) {
       return console.error('player attempted to add blueprint without builder permission')
     }
     this.world.blueprints.add(blueprint)
@@ -399,7 +438,7 @@ export class ServerNetwork extends System {
   }
 
   onBlueprintModified = (socket, data) => {
-    if (!this.isBuilder(socket.player)) {
+    if (!socket.player.isBuilder()) {
       return console.error('player attempted to modify blueprint without builder permission')
     }
     const blueprint = this.world.blueprints.get(data.id)
@@ -416,7 +455,7 @@ export class ServerNetwork extends System {
   }
 
   onEntityAdded = (socket, data) => {
-    if (!this.isBuilder(socket.player)) {
+    if (!socket.player.isBuilder()) {
       return console.error('player attempted to add entity without builder permission')
     }
     const entity = this.world.entities.add(data)
@@ -458,8 +497,7 @@ export class ServerNetwork extends System {
   }
 
   onEntityRemoved = (socket, id) => {
-    if (!this.isBuilder(socket.player))
-      return console.error('player attempted to remove entity without builder permission')
+    if (!socket.player.isBuilder()) return console.error('player attempted to remove entity without builder permission')
     const entity = this.world.entities.get(id)
     this.world.entities.remove(id)
     this.send('entityRemoved', id, socket.id)
@@ -467,14 +505,14 @@ export class ServerNetwork extends System {
   }
 
   onSettingsModified = (socket, data) => {
-    if (!this.isBuilder(socket.player))
+    if (!socket.player.isBuilder())
       return console.error('player attempted to modify settings without builder permission')
     this.world.settings.set(data.key, data.value)
     this.send('settingsModified', data, socket.id)
   }
 
   onSpawnModified = async (socket, op) => {
-    if (!this.isBuilder(socket.player)) {
+    if (!socket.player.isBuilder()) {
       return console.error('player attempted to modify spawn without builder permission')
     }
     const player = socket.player
@@ -516,11 +554,27 @@ export class ServerNetwork extends System {
     this.sendTo(data.networkId, 'playerSessionAvatar', data.avatar)
   }
 
+  onAi = (socket, action) => {
+    if (!socket.player.isBuilder()) {
+      return console.error('player attempted to use ai but they are not a builder')
+    }
+    this.world.ai.onAction(action)
+  }
+
   onPing = (socket, time) => {
     socket.send('pong', time)
   }
 
+  onEvmConnect = (socket, address) => {
+    this.world.evm.onEvmConnect(socket, address)
+  }
+
+  onEvmDisconnect = socket => {
+    this.world.evm.onEvmDisconnect(socket)
+  }
+
   onDisconnect = (socket, code) => {
+    this.world.livekit.clearModifiers(socket.id)
     socket.player.destroy(true)
     this.sockets.delete(socket.id)
   }

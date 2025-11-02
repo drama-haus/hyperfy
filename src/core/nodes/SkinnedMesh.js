@@ -30,9 +30,15 @@ export class SkinnedMesh extends Node {
     this.actions = {}
     this.bones = null
     this.animNames = []
+    this.boneHandles = {}
   }
 
   mount() {
+    this.clips = {}
+    this.actions = {}
+    this.bones = null
+    this.animNames = []
+
     this.obj = SkeletonUtils.clone(this._object3d)
     this.obj.matrixWorld.copy(this.matrixWorld)
     this.obj.matrixAutoUpdate = false
@@ -159,12 +165,14 @@ export class SkinnedMesh extends Node {
     this.action = null
   }
 
-  getBoneTransform(name) {
+  readBone(name) {
     if (!this.obj) return null
     if (!this.bones) {
       this.bones = {}
-      this.obj.traverse(child => {
-        if (child.isBone) this.bones[child.name] = child
+      this.obj.traverse(obj => {
+        if (obj.isBone) {
+          this.bones[obj.name] = obj
+        }
       })
     }
     const bone = this.bones[name]
@@ -172,6 +180,50 @@ export class SkinnedMesh extends Node {
       console.warn(`[skinnedmesh] bone not found: ${name}`)
       return null
     }
+    return bone
+  }
+
+  getBone(name) {
+    let handle = this.boneHandles[name]
+    if (!handle) {
+      const self = this
+      handle = {
+        get position() {
+          return self.readBone(name)?.position
+        },
+        get quaternion() {
+          return self.readBone(name)?.quaternion
+        },
+        get rotation() {
+          return self.readBone(name)?.rotation
+        },
+        get scale() {
+          return self.readBone(name)?.scale
+        },
+        get matrixWorld() {
+          const bone = self.readBone(name)
+          if (!bone) return null
+          if (self.isDirty) self.clean()
+          bone.updateMatrixWorld(true)
+          return bone.matrixWorld
+        },
+        set matrixWorld(mat) {
+          const bone = self.readBone(name)
+          if (!bone) return
+          bone.matrixAutoUpdate = false
+          bone.matrixWorldAutoUpdate = false
+          bone.matrixWorld.copy(mat)
+        },
+      }
+      this.boneHandles[name] = handle
+    }
+    return handle
+  }
+
+  // deprecated: use getBone(name).matrixWorld
+  getBoneTransform(name) {
+    const bone = this.readBone(name)
+    if (!bone) return null
     // combine the skinned mesh's world matrix with the bone's world matrix
     // return m1.multiplyMatrices(this.matrixWorld, bone.matrixWorld)
     bone.updateMatrixWorld(true)
@@ -202,6 +254,9 @@ export class SkinnedMesh extends Node {
         },
         stop(opts) {
           self.stop(opts)
+        },
+        getBone(name) {
+          return self.getBone(name)
         },
         getBoneTransform(name) {
           return self.getBoneTransform(name)

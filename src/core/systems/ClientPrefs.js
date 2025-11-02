@@ -26,20 +26,32 @@ export class ClientPrefs extends System {
       data.v = 3
       data.shadows = null
     }
+    // v4: reset shadows for new defaults (low or med)
+    if (data.v < 4) {
+      data.v = 4
+      data.shadows = null
+    }
 
     this.ui = isNumber(data.ui) ? data.ui : isTouch ? 0.9 : 1
     this.actions = isBoolean(data.actions) ? data.actions : true
     this.stats = isBoolean(data.stats) ? data.stats : false
     this.dpr = isNumber(data.dpr) ? data.dpr : 1
-    this.shadows = data.shadows ? data.shadows : isTouch ? 'med' : 'high' // none, low=1, med=2048cascade, high=4096cascade
+    this.shadows = data.shadows ? data.shadows : isTouch ? 'low' : 'med' // none, low=1, med=2048cascade, high=4096cascade
     this.postprocessing = isBoolean(data.postprocessing) ? data.postprocessing : true
     this.bloom = isBoolean(data.bloom) ? data.bloom : true
+    this.ao = isBoolean(data.ao) ? data.ao : true
     this.music = isNumber(data.music) ? data.music : 1
     this.sfx = isNumber(data.sfx) ? data.sfx : 1
     this.voice = isNumber(data.voice) ? data.voice : 1
     this.v = data.v
 
     this.changes = null
+  }
+
+  init() {
+    this.world.chat.bindCommand('stats', () => {
+      this.setStats(!this.stats)
+    })
   }
 
   preFixedUpdate() {
@@ -58,7 +70,9 @@ export class ClientPrefs extends System {
     this.persist()
   }
 
-  persist() {
+  async persist() {
+    // a small delay to ensure prefs that crash dont persist (eg old iOS with UHD shadows etc)
+    await new Promise(resolve => setTimeout(resolve, 2000))
     storage.set('prefs', {
       ui: this.ui,
       actions: this.actions,
@@ -67,6 +81,7 @@ export class ClientPrefs extends System {
       shadows: this.shadows,
       postprocessing: this.postprocessing,
       bloom: this.bloom,
+      ao: this.ao,
       music: this.music,
       sfx: this.sfx,
       voice: this.voice,
@@ -100,6 +115,10 @@ export class ClientPrefs extends System {
 
   setBloom(value) {
     this.modify('bloom', value)
+  }
+
+  setAO(value) {
+    this.modify('ao', value)
   }
 
   setMusic(value) {

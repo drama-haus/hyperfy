@@ -91,7 +91,7 @@ export class ServerLoader extends System {
     if (this.promises.has(key)) {
       return this.promises.get(key)
     }
-    url = this.world.resolveURL(url)
+    url = this.world.resolveURL(url, true)
 
     let promise
     if (type === 'hdr') {

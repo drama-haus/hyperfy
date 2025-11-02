@@ -59,8 +59,7 @@ class Stats {
     this.mode = mode
     this.horizontal = horizontal
     this.dom = document.createElement('div')
-    this.dom.style.cssText =
-      'position:absolute;top:0;right:0;opacity:0.9;z-index:10000;display:flex;align-items:center;'
+    this.dom.style.cssText = 'position:absolute;top:0;right:0;opacity:0.9;z-index:1;display:flex;align-items:center;'
 
     if (minimal) {
       this.dom.style.cssText += 'cursor:pointer'

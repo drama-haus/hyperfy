@@ -3,10 +3,13 @@ import { MenuIcon, MicIcon, MicOffIcon, SettingsIcon, VRIcon } from './Icons'
 import {
   BookTextIcon,
   BoxIcon,
+  ChevronDownIcon,
+  ChevronsUpDownIcon,
   CirclePlusIcon,
   CodeIcon,
   DownloadIcon,
   EarthIcon,
+  UsersIcon,
   InfoIcon,
   LayersIcon,
   ListTreeIcon,
@@ -24,10 +27,14 @@ import {
   SquareMenuIcon,
   TagIcon,
   Trash2Icon,
+  UserXIcon,
+  ShieldBanIcon,
+  Volume2Icon,
+  HammerIcon,
+  CircleArrowRightIcon,
 } from 'lucide-react'
 import { cls } from './cls'
 import { useContext, useEffect, useMemo, useRef, useState } from 'react'
-import { usePermissions } from './usePermissions'
 import {
   FieldBtn,
   FieldCurve,
@@ -39,13 +46,14 @@ import {
   FieldTextarea,
   FieldToggle,
   FieldVec3,
+  FieldColor,
 } from './Fields'
 import { HintContext, HintProvider } from './Hint'
 import { useFullscreen } from './useFullscreen'
 import { downloadFile } from '../../core/extras/downloadFile'
 import { exportApp } from '../../core/extras/appTools'
 import { hashFile } from '../../core/utils-client'
-import { cloneDeep, isArray, isBoolean } from 'lodash-es'
+import { cloneDeep, isArray, isBoolean, sortBy } from 'lodash-es'
 import { storage } from '../../core/storage'
 import { ScriptEditor } from './ScriptEditor'
 import { NodeHierarchy } from './NodeHierarchy'
@@ -54,6 +62,8 @@ import { DEG2RAD, RAD2DEG } from '../../core/extras/general'
 import * as THREE from '../../core/extras/three'
 import { isTouch } from '../utils'
 import { uuid } from '../../core/utils'
+import { useRank } from './useRank'
+import { Ranks } from '../../core/extras/ranks'
 
 const mainSectionPanes = ['prefs']
 const worldSectionPanes = ['world', 'docs', 'apps', 'add']
@@ -72,8 +82,8 @@ backdrop-filter: blur(5px);
  */
 
 export function Sidebar({ world, ui }) {
-  const { isAdmin, isBuilder } = usePermissions(world)
   const player = world.entities.player
+  const { isAdmin, isBuilder } = useRank(world, player)
   const [livekit, setLiveKit] = useState(() => world.livekit.status)
   useEffect(() => {
     const onLiveKitStatus = status => {
@@ -114,13 +124,20 @@ export function Sidebar({ world, ui }) {
         `}
       >
         <div className='sidebar-sections'>
-          <Section active={mainSectionPanes.includes(activePane)} bottom>
+          <Section active={activePane} bottom>
             <Btn
               active={activePane === 'prefs'}
               suspended={ui.pane === 'prefs' && !activePane}
               onClick={() => world.ui.togglePane('prefs')}
             >
               <MenuIcon size='1.25rem' />
+            </Btn>
+            <Btn
+              active={activePane === 'players'}
+              suspended={ui.pane === 'players' && !activePane}
+              onClick={() => world.ui.togglePane('players')}
+            >
+              <UsersIcon size='1.25rem' />
             </Btn>
             {isTouch && (
               <Btn
@@ -138,11 +155,16 @@ export function Sidebar({ world, ui }) {
             )}
             {livekit.available && livekit.connected && (
               <Btn
+                muted={livekit.mic && (livekit.level === 'disabled' || livekit.muted)}
                 onClick={() => {
                   world.livekit.setMicrophoneEnabled()
                 }}
               >
-                {livekit.mic ? <MicIcon size='1.25rem' /> : <MicOffIcon size='1.25rem' />}
+                {livekit.mic && livekit.level !== 'disabled' && !livekit.muted ? (
+                  <MicIcon size='1.25rem' />
+                ) : (
+                  <MicOffIcon size='1.25rem' />
+                )}
               </Btn>
             )}
             {world.xr.supportsVR && (
@@ -156,7 +178,7 @@ export function Sidebar({ world, ui }) {
             )}
           </Section>
           {isBuilder && (
-            <Section active={worldSectionPanes.includes(activePane)} top bottom>
+            <Section active={activePane} top bottom>
               <Btn
                 active={activePane === 'world'}
                 suspended={ui.pane === 'world' && !activePane}
@@ -188,7 +210,7 @@ export function Sidebar({ world, ui }) {
             </Section>
           )}
           {ui.app && (
-            <Section active={appSectionPanes.includes(activePane)} top bottom>
+            <Section active={activePane} top bottom>
               <Btn
                 active={activePane === 'app'}
                 suspended={ui.pane === 'app' && !activePane}
@@ -228,6 +250,7 @@ export function Sidebar({ world, ui }) {
         {ui.pane === 'script' && <Script key={ui.app.data.id} world={world} hidden={!ui.active} />}
         {ui.pane === 'nodes' && <Nodes key={ui.app.data.id} world={world} hidden={!ui.active} />}
         {ui.pane === 'meta' && <Meta key={ui.app.data.id} world={world} hidden={!ui.active} />}
+        {ui.pane === 'players' && <Players world={world} hidden={!ui.active} />}
       </div>
     </HintProvider>
   )
@@ -238,13 +261,15 @@ function Section({ active, top, bottom, children }) {
     <div
       className={cls('sidebar-section', { active, top, bottom })}
       css={css`
-        background: rgba(11, 10, 21, 0.85);
-        border: 0.0625rem solid #2a2b39;
-        backdrop-filter: blur(5px);
-        border-radius: 1rem;
+        background: rgba(11, 10, 21, 0.2);
+        border: 1px solid rgba(255, 255, 255, 0.05);
+        border-radius: 2rem;
         padding: 0.6875rem 0;
         pointer-events: auto;
         position: relative;
+        &.active {
+          background: rgba(11, 10, 21, 0.9);
+        }
       `}
     >
       {children}
@@ -252,17 +277,17 @@ function Section({ active, top, bottom, children }) {
   )
 }
 
-function Btn({ disabled, suspended, active, children, ...props }) {
+function Btn({ disabled, suspended, active, muted, children, ...props }) {
   return (
     <div
-      className={cls('sidebar-btn', { disabled, suspended, active })}
+      className={cls('sidebar-btn', { disabled, suspended, active, muted })}
       css={css`
         width: 2.75rem;
         height: 1.875rem;
         display: flex;
         align-items: center;
         justify-content: center;
-        color: rgba(255, 255, 255, 0.8);
+        color: white;
         position: relative;
         .sidebar-btn-dot {
           display: none;
@@ -287,11 +312,14 @@ function Btn({ disabled, suspended, active, children, ...props }) {
         &.suspended {
           .sidebar-btn-dot {
             display: block;
-            background: #ba6540;
+            /* background: rgb(26, 151, 241); */
           }
         }
         &.disabled {
-          color: #5d6077;
+          color: rgba(255, 255, 255, 0.3);
+        }
+        &.muted {
+          color: #ff4b4b;
         }
       `}
       {...props}
@@ -412,12 +440,13 @@ const shadowOptions = [
 ]
 function Prefs({ world, hidden }) {
   const player = world.entities.player
-  const { isAdmin, isBuilder } = usePermissions(world)
+  const { isAdmin, isBuilder } = useRank(world, player)
   const [name, setName] = useState(() => player.data.name)
   const [dpr, setDPR] = useState(world.prefs.dpr)
   const [shadows, setShadows] = useState(world.prefs.shadows)
   const [postprocessing, setPostprocessing] = useState(world.prefs.postprocessing)
   const [bloom, setBloom] = useState(world.prefs.bloom)
+  const [ao, setAO] = useState(world.prefs.ao)
   const [music, setMusic] = useState(world.prefs.music)
   const [sfx, setSFX] = useState(world.prefs.sfx)
   const [voice, setVoice] = useState(world.prefs.voice)
@@ -453,6 +482,7 @@ function Prefs({ world, hidden }) {
       if (changes.shadows) setShadows(changes.shadows.value)
       if (changes.postprocessing) setPostprocessing(changes.postprocessing.value)
       if (changes.bloom) setBloom(changes.bloom.value)
+      if (changes.ao) setAO(changes.ao.value)
       if (changes.music) setMusic(changes.music.value)
       if (changes.sfx) setSFX(changes.sfx.value)
       if (changes.voice) setVoice(changes.voice.value)
@@ -471,10 +501,9 @@ function Prefs({ world, hidden }) {
         className='prefs noscrollbar'
         css={css`
           overflow-y: auto;
-          background: rgba(11, 10, 21, 0.85);
-          border: 0.0625rem solid #2a2b39;
-          backdrop-filter: blur(5px);
-          border-radius: 1rem;
+          background: rgba(11, 10, 21, 0.9);
+          border: 1px solid rgba(255, 255, 255, 0.05);
+          border-radius: 1.375rem;
           padding: 0.6rem 0;
         `}
       >
@@ -515,6 +544,14 @@ function Prefs({ world, hidden }) {
           trueLabel='Visible'
           falseLabel='Hidden'
         />
+        {!isTouch && (
+          <FieldBtn
+            label='Hide Interface'
+            note='Z'
+            hint='Hide the user interface. Press Z to re-enable.'
+            onClick={() => world.ui.toggleVisible()}
+          />
+        )}
         <Group label='Graphics' />
         <FieldSwitch
           label='Resolution'
@@ -531,21 +568,31 @@ function Prefs({ world, hidden }) {
           onChange={shadows => world.prefs.setShadows(shadows)}
         />
         <FieldToggle
-          label='Postprocessing'
+          label='Post-processing'
           hint='Enable or disable all postprocessing effects'
-          trueLabel='Enabled'
-          falseLabel='Disabled'
+          trueLabel='On'
+          falseLabel='Off'
           value={postprocessing}
           onChange={postprocessing => world.prefs.setPostprocessing(postprocessing)}
         />
         <FieldToggle
           label='Bloom'
           hint='Enable or disable the bloom effect'
-          trueLabel='Enabled'
-          falseLabel='Disabled'
+          trueLabel='On'
+          falseLabel='Off'
           value={bloom}
           onChange={bloom => world.prefs.setBloom(bloom)}
         />
+        {world.settings.ao && (
+          <FieldToggle
+            label='Ambient Occlusion'
+            hint='Enable or disable the ambient occlusion effect'
+            trueLabel='On'
+            falseLabel='Off'
+            value={ao}
+            onChange={ao => world.prefs.setAO(ao)}
+          />
+        )}
         <Group label='Audio' />
         <FieldRange
           label='Music'
@@ -579,23 +626,39 @@ function Prefs({ world, hidden }) {
   )
 }
 
+const voiceChatOptions = [
+  { label: 'Disabled', value: 'disabled' },
+  { label: 'Spatial', value: 'spatial' },
+  { label: 'Global', value: 'global' },
+]
+const rankOptions = [
+  { label: 'Admins', value: 2 },
+  { label: 'Builders', value: 1 },
+  { label: 'Visitors', value: 0 },
+]
 function World({ world, hidden }) {
   const player = world.entities.player
-  const { isAdmin } = usePermissions(world)
+  const { isAdmin } = useRank(world, player)
   const [title, setTitle] = useState(world.settings.title)
   const [desc, setDesc] = useState(world.settings.desc)
-  const [model, setModel] = useState(world.settings.model)
+  const [image, setImage] = useState(world.settings.image)
   const [avatar, setAvatar] = useState(world.settings.avatar)
+  const [customAvatars, setCustomAvatars] = useState(world.settings.customAvatars)
+  const [voice, setVoice] = useState(world.settings.voice)
   const [playerLimit, setPlayerLimit] = useState(world.settings.playerLimit)
-  const [publicc, setPublic] = useState(world.settings.public)
+  const [ao, setAO] = useState(world.settings.ao)
+  const [rank, setRank] = useState(world.settings.rank)
   useEffect(() => {
     const onChange = changes => {
       if (changes.title) setTitle(changes.title.value)
       if (changes.desc) setDesc(changes.desc.value)
-      if (changes.model) setModel(changes.model.value)
+      if (changes.image) setImage(changes.image.value)
       if (changes.avatar) setAvatar(changes.avatar.value)
+      if (changes.customAvatars) setCustomAvatars(changes.customAvatars.value)
+      if (changes.voice) setVoice(changes.voice.value)
       if (changes.playerLimit) setPlayerLimit(changes.playerLimit.value)
-      if (changes.public) setPublic(changes.public.value)
+      if (changes.ao) setAO(changes.ao.value)
+      if (changes.rank) setRank(changes.rank.value)
     }
     world.settings.on('change', onChange)
     return () => {
@@ -607,10 +670,9 @@ function World({ world, hidden }) {
       <div
         className='world'
         css={css`
-          background: rgba(11, 10, 21, 0.85);
-          border: 0.0625rem solid #2a2b39;
-          backdrop-filter: blur(5px);
-          border-radius: 1rem;
+          background: rgba(11, 10, 21, 0.9);
+          border: 1px solid rgba(255, 255, 255, 0.05);
+          border-radius: 1.375rem;
           display: flex;
           flex-direction: column;
           min-height: 12rem;
@@ -651,20 +713,37 @@ function World({ world, hidden }) {
             onChange={value => world.settings.set('desc', value, true)}
           />
           <FieldFile
-            label='Environment'
-            hint='Change the global environment model'
-            kind='model'
-            value={model}
-            onChange={value => world.settings.set('model', value, true)}
+            label='Image'
+            hint='Change the image of the world. This is shown when loading into or sharing links to this world.'
+            kind='image'
+            value={image}
+            onChange={value => world.settings.set('image', value, true)}
             world={world}
           />
           <FieldFile
-            label='Avatar'
+            label='Default Avatar'
             hint='Change the default avatar everyone spawns into the world with'
             kind='avatar'
             value={avatar}
             onChange={value => world.settings.set('avatar', value, true)}
             world={world}
+          />
+          {isAdmin && world.settings.hasAdminCode && (
+            <FieldToggle
+              label='Custom Avatars'
+              hint='Allow visitors to drag and drop custom VRM avatars.'
+              trueLabel='On'
+              falseLabel='Off'
+              value={customAvatars}
+              onChange={value => world.settings.set('customAvatars', value, true)}
+            />
+          )}
+          <FieldSwitch
+            label='Voice Chat'
+            hint='Set the base voice chat mode. Apps are able to modify this using custom rules.'
+            options={voiceChatOptions}
+            value={voice}
+            onChange={voice => world.settings.set('voice', voice, true)}
           />
           <FieldNumber
             label='Player Limit'
@@ -672,12 +751,22 @@ function World({ world, hidden }) {
             value={playerLimit}
             onChange={value => world.settings.set('playerLimit', value, true)}
           />
-          {isAdmin && (
+          <FieldToggle
+            label='Ambient Occlusion'
+            hint={`Improves visuals by approximating darkened corners etc. When enabled, users also have an option to disable this on their device for performance.`}
+            trueLabel='On'
+            falseLabel='Off'
+            value={ao}
+            onChange={value => world.settings.set('ao', value, true)}
+          />
+          {isAdmin && world.settings.hasAdminCode && (
             <FieldToggle
-              label='Public'
-              hint='Allow everyone to build (and destroy) things in the world. When disabled only admins can build.'
-              value={publicc}
-              onChange={value => world.settings.set('public', value, true)}
+              label='Free Build'
+              hint='Allow everyone to build (and destroy) things in the world.'
+              trueLabel='On'
+              falseLabel='Off'
+              value={rank >= Ranks.BUILDER}
+              onChange={value => world.settings.set('rank', value ? Ranks.BUILDER : Ranks.VISITOR, true)}
             />
           )}
           {/* <FieldBtn
@@ -722,10 +811,9 @@ function Apps({ world, hidden }) {
       <div
         className='apps'
         css={css`
-          background: rgba(11, 10, 21, 0.85);
-          border: 0.0625rem solid #2a2b39;
-          backdrop-filter: blur(5px);
-          border-radius: 1rem;
+          background: rgba(11, 10, 21, 0.9);
+          border: 1px solid rgba(255, 255, 255, 0.05);
+          border-radius: 1.375rem;
           flex: 1;
           display: flex;
           flex-direction: column;
@@ -839,10 +927,9 @@ function Add({ world, hidden }) {
       <div
         className='add'
         css={css`
-          background: rgba(11, 10, 21, 0.85);
-          border: 0.0625rem solid #2a2b39;
-          backdrop-filter: blur(5px);
-          border-radius: 1rem;
+          background: rgba(11, 10, 21, 0.9);
+          border: 1px solid rgba(255, 255, 255, 0.05);
+          border-radius: 1.375rem;
           display: flex;
           flex-direction: column;
           min-height: 17rem;
@@ -948,7 +1035,7 @@ function App({ world, hidden }) {
   }
   const changeModel = async file => {
     if (!file) return
-    const ext = file.name.split('.').pop()
+    const ext = file.name.split('.').pop().toLowerCase()
     if (!allowedModels.includes(ext)) return
     // immutable hash the file
     const hash = await hashFile(file)
@@ -985,10 +1072,9 @@ function App({ world, hidden }) {
       <div
         className='app'
         css={css`
-          background: rgba(11, 10, 21, 0.85);
-          border: 0.0625rem solid #2a2b39;
-          backdrop-filter: blur(5px);
-          border-radius: 1rem;
+          background: rgba(11, 10, 21, 0.9);
+          border: 1px solid rgba(255, 255, 255, 0.05);
+          border-radius: 1.375rem;
           display: flex;
           flex-direction: column;
           min-height: 1rem;
@@ -1033,17 +1119,31 @@ function App({ world, hidden }) {
             display: flex;
             align-items: center;
             justify-content: center;
-            color: #5d6077;
-            &:hover {
+            color: #6f7289;
+            &:hover:not(.disabled) {
               cursor: pointer;
             }
             &.active {
               color: white;
             }
+            &.disabled {
+              color: #434556;
+            }
+          }
+          .app-transforms {
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+          }
+          .app-transforms-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0.4rem;
+            &:hover {
+              cursor: pointer;
+            }
           }
           .app-content {
             flex: 1;
-            padding: 0.5rem 0;
             overflow-y: auto;
           }
         `}
@@ -1069,63 +1169,66 @@ function App({ world, hidden }) {
               </div>
             </AppModelBtn>
           )}
-          <div
-            className='app-btn'
-            onClick={() => {
-              world.ui.setApp(null)
-              app.destroy(true)
-            }}
-            onPointerEnter={() => setHint('Delete this app')}
-            onPointerLeave={() => setHint(null)}
-          >
-            <Trash2Icon size='1.125rem' />
-          </div>
+          {!blueprint.scene && (
+            <div
+              className='app-btn'
+              onClick={() => {
+                world.ui.setApp(null)
+                app.destroy(true)
+              }}
+              onPointerEnter={() => setHint('Delete this app')}
+              onPointerLeave={() => setHint(null)}
+            >
+              <Trash2Icon size='1.125rem' />
+            </div>
+          )}
         </div>
-        <div className='app-toggles'>
-          <div
-            className={cls('app-toggle', { active: blueprint.disabled })}
-            onClick={() => toggleKey('disabled')}
-            onPointerEnter={() => setHint('Disable this app so that it is no longer active in the world.')}
-            onPointerLeave={() => setHint(null)}
-          >
-            <OctagonXIcon size='1.125rem' />
-            {/* {blueprint.disabled ? <SquareIcon size='1.125rem' /> : <SquareCheckBigIcon size='1.125rem' />} */}
+        {!blueprint.scene && (
+          <div className='app-toggles'>
+            <div
+              className={cls('app-toggle', { active: blueprint.disabled })}
+              onClick={() => toggleKey('disabled')}
+              onPointerEnter={() => setHint('Disable this app so that it is no longer active in the world.')}
+              onPointerLeave={() => setHint(null)}
+            >
+              <OctagonXIcon size='1.125rem' />
+              {/* {blueprint.disabled ? <SquareIcon size='1.125rem' /> : <SquareCheckBigIcon size='1.125rem' />} */}
+            </div>
+            <div
+              className={cls('app-toggle', { active: pinned })}
+              onClick={() => togglePinned()}
+              onPointerEnter={() => setHint("Pin this app so it can't accidentally be moved.")}
+              onPointerLeave={() => setHint(null)}
+            >
+              <PinIcon size='1.125rem' />
+            </div>
+            <div
+              className={cls('app-toggle', { active: blueprint.preload })}
+              onClick={() => toggleKey('preload')}
+              onPointerEnter={() => setHint('Preload this app before entering the world.')}
+              onPointerLeave={() => setHint(null)}
+            >
+              <LoaderPinwheelIcon size='1.125rem' />
+            </div>
+            <div
+              className={cls('app-toggle', { active: blueprint.unique })}
+              onClick={() => toggleKey('unique')}
+              onPointerEnter={() => setHint('Make this app unique so that new duplicates are not linked to this one.')}
+              onPointerLeave={() => setHint(null)}
+            >
+              <SparkleIcon size='1.125rem' />
+            </div>
           </div>
-          <div
-            className={cls('app-toggle', { active: pinned })}
-            onClick={togglePinned}
-            onPointerEnter={() => setHint("Pin this app so it can't accidentally be moved.")}
-            onPointerLeave={() => setHint(null)}
-          >
-            <PinIcon size='1.125rem' />
-          </div>
-          <div
-            className={cls('app-toggle', { active: blueprint.preload })}
-            onClick={() => toggleKey('preload')}
-            onPointerEnter={() => setHint('Preload this app before entering the world.')}
-            onPointerLeave={() => setHint(null)}
-          >
-            <LoaderPinwheelIcon size='1.125rem' />
-          </div>
-          <div
-            className={cls('app-toggle', { active: blueprint.unique })}
-            onClick={() => toggleKey('unique')}
-            onPointerEnter={() => setHint('Make this app unique so that new duplicates are not linked to this one.')}
-            onPointerLeave={() => setHint(null)}
-          >
-            <SparkleIcon size='1.125rem' />
-          </div>
-          <div
-            className={cls('app-toggle', { active: transforms })}
-            onClick={() => setTransforms(!transforms)}
-            onPointerEnter={() => setHint('Show and hide transform fields for fine grained control.')}
-            onPointerLeave={() => setHint(null)}
-          >
-            <Move3DIcon size='1.125rem' />
-          </div>
-        </div>
+        )}
         <div className='app-content noscrollbar'>
-          {transforms && <AppTransformFields app={app} />}
+          {!blueprint.scene && (
+            <div className='app-transforms'>
+              <div className='app-transforms-btn' onClick={() => setTransforms(!transforms)}>
+                <ChevronsUpDownIcon size='1rem' />
+              </div>
+              {transforms && <AppTransformFields app={app} />}
+            </div>
+          )}
           <AppFields world={world} app={app} blueprint={blueprint} />
         </div>
       </div>
@@ -1141,7 +1244,8 @@ function AppTransformFields({ app }) {
     <>
       <FieldVec3
         label='Position'
-        dp={1}
+        dp={2}
+        smallStep={0.01}
         step={0.1}
         bigStep={1}
         value={position}
@@ -1157,7 +1261,8 @@ function AppTransformFields({ app }) {
       />
       <FieldVec3
         label='Rotation'
-        dp={1}
+        dp={2}
+        smallStep={0.1}
         step={1}
         bigStep={5}
         value={rotation}
@@ -1173,7 +1278,8 @@ function AppTransformFields({ app }) {
       />
       <FieldVec3
         label='Scale'
-        dp={1}
+        dp={2}
+        smallStep={0.01}
         step={0.1}
         bigStep={1}
         value={scale}
@@ -1185,12 +1291,6 @@ function AppTransformFields({ app }) {
             scale: value,
           })
         }}
-      />
-      <div
-        css={css`
-          margin: 0.5rem 0;
-          border-top: 1px solid rgba(255, 255, 255, 0.03);
-        `}
       />
     </>
   )
@@ -1376,6 +1476,11 @@ function AppField({ world, props, field, value, modify }) {
   if (field.type === 'button') {
     return <FieldBtn label={field.label} hint={field.hint} onClick={field.onClick} />
   }
+  if (field.type === 'color') {
+    return (
+      <FieldColor label={field.label} hint={field.hint} value={value} onChange={value => modify(field.key, value)} />
+    )
+  }
   return null
 }
 
@@ -1418,10 +1523,9 @@ function Script({ world, hidden }) {
       css={css`
         pointer-events: auto;
         align-self: stretch;
-        background: rgba(11, 10, 21, 0.85);
-        border: 0.0625rem solid #2a2b39;
-        backdrop-filter: blur(5px);
-        border-radius: 1rem;
+        background: rgba(11, 10, 21, 0.9);
+        border: 1px solid rgba(255, 255, 255, 0.05);
+        border-radius: 1.375rem;
         display: flex;
         flex-direction: column;
         align-items: stretch;
@@ -1467,7 +1571,7 @@ function Script({ world, hidden }) {
       `}
     >
       <div className='script-head'>
-        <div className='script-title'>Script</div>
+        <div className='script-title'>Script: {app.blueprint?.name}</div>
         <div className='script-btn' onClick={() => handle?.save()}>
           <SaveIcon size='1.125rem' />
         </div>
@@ -1486,10 +1590,9 @@ function Nodes({ world, hidden }) {
         className='nodes'
         css={css`
           flex: 1;
-          background: rgba(11, 10, 21, 0.85);
-          border: 0.0625rem solid #2a2b39;
-          backdrop-filter: blur(5px);
-          border-radius: 1rem;
+          background: rgba(11, 10, 21, 0.9);
+          border: 1px solid rgba(255, 255, 255, 0.05);
+          border-radius: 1.375rem;
           min-height: 23.7rem;
           display: flex;
           flex-direction: column;
@@ -1540,10 +1643,9 @@ function Meta({ world, hidden }) {
         className='meta'
         css={css`
           flex: 1;
-          background: rgba(11, 10, 21, 0.85);
-          border: 0.0625rem solid #2a2b39;
-          backdrop-filter: blur(5px);
-          border-radius: 1rem;
+          background: rgba(11, 10, 21, 0.9);
+          border: 1px solid rgba(255, 255, 255, 0.05);
+          border-radius: 1.375rem;
           display: flex;
           flex-direction: column;
           min-height: 1rem;
@@ -1602,6 +1704,199 @@ function Meta({ world, hidden }) {
             value={blueprint.desc}
             onChange={value => set('desc', value)}
           />
+        </div>
+      </div>
+    </Pane>
+  )
+}
+
+function getPlayers(world) {
+  let players = []
+  world.entities.players.forEach(player => {
+    players.push(player)
+  })
+  players = sortBy(players, player => player.enteredAt)
+  return players
+}
+function Players({ world, hidden }) {
+  const { setHint } = useContext(HintContext)
+  const localPlayer = world.entities.player
+  const isAdmin = localPlayer.isAdmin()
+  const [players, setPlayers] = useState(() => getPlayers(world))
+  useEffect(() => {
+    const onChange = () => {
+      setPlayers(getPlayers(world))
+    }
+    world.entities.on('added', onChange)
+    world.entities.on('removed', onChange)
+    world.livekit.on('speaking', onChange)
+    world.livekit.on('muted', onChange)
+    world.on('rank', onChange)
+    world.on('name', onChange)
+    return () => {
+      world.entities.off('added', onChange)
+      world.entities.off('removed', onChange)
+      world.livekit.off('speaking', onChange)
+      world.livekit.off('muted', onChange)
+      world.off('rank', onChange)
+      world.off('name', onChange)
+    }
+  }, [])
+  const toggleBuilder = player => {
+    if (player.data.rank === Ranks.BUILDER) {
+      world.network.send('modifyRank', { playerId: player.data.id, rank: Ranks.VISITOR })
+    } else {
+      world.network.send('modifyRank', { playerId: player.data.id, rank: Ranks.BUILDER })
+    }
+  }
+  const toggleMute = player => {
+    world.network.send('mute', { playerId: player.data.id, muted: !player.isMuted() })
+  }
+  const kick = player => {
+    world.network.send('kick', player.data.id)
+  }
+  const teleportTo = player => {
+    // behind player 0.6m (capsule size)
+    const position = new THREE.Vector3(0, 0, 1)
+    position.applyQuaternion(player.base.quaternion)
+    position.multiplyScalar(0.6).add(player.base.position)
+    localPlayer.teleport({
+      position,
+      rotationY: player.base.rotation.y,
+    })
+  }
+  return (
+    <Pane hidden={hidden}>
+      <div
+        className='players'
+        css={css`
+          background: rgba(11, 10, 21, 0.9);
+          border: 1px solid rgba(255, 255, 255, 0.05);
+          border-radius: 1.375rem;
+          display: flex;
+          flex-direction: column;
+          min-height: 1rem;
+          .players-head {
+            height: 3.125rem;
+            padding: 0 1rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            display: flex;
+            align-items: center;
+          }
+          .players-title {
+            flex: 1;
+            font-weight: 500;
+            font-size: 1rem;
+            line-height: 1;
+            white-space: nowrap;
+            text-overflow: ellipsis;
+            overflow: hidden;
+          }
+          .players-content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 0.5rem 0;
+          }
+          .players-item {
+            display: flex;
+            align-items: center;
+            padding: 0.1rem 0.5rem 0.1rem 1rem;
+            height: 36px;
+          }
+          .players-name {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            span {
+              white-space: nowrap;
+              text-overflow: ellipsis;
+              overflow: hidden;
+              margin-right: 0.5rem;
+            }
+            svg {
+              color: rgba(255, 255, 255, 0.6);
+            }
+          }
+          .players-btn {
+            width: 2rem;
+            height: 2rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: rgba(255, 255, 255, 0.8);
+            &:hover:not(.readonly) {
+              cursor: pointer;
+              color: white;
+            }
+            &.dim {
+              color: #556181;
+            }
+          }
+        `}
+      >
+        <div className='players-head'>
+          <div className='players-title'>Players</div>
+        </div>
+        <div className='players-content noscrollbar'>
+          {players.map(player => (
+            <div className='players-item' key={player.data.id}>
+              <div className='players-name'>
+                <span>{player.data.name}</span>
+                {player.speaking && <Volume2Icon size='1rem' />}
+                {player.isMuted() && <MicOffIcon size='1rem' />}
+              </div>
+              {isAdmin && player.isRemote && !player.isAdmin() && world.settings.rank < Ranks.BUILDER && (
+                <div
+                  className={cls('players-btn', { dim: !player.isBuilder() })}
+                  onPointerEnter={() =>
+                    setHint(
+                      player.isBuilder()
+                        ? 'Player is not a builder. Click to allow building.'
+                        : 'Player is a builder. Click to revoke.'
+                    )
+                  }
+                  onPointerLeave={() => setHint(null)}
+                  onClick={() => toggleBuilder(player)}
+                >
+                  <HammerIcon size='1.125rem' />
+                </div>
+              )}
+              {player.isRemote && localPlayer.outranks(player) && (
+                <div
+                  className='players-btn'
+                  onPointerEnter={() => setHint('Teleport to player.')}
+                  onPointerLeave={() => setHint(null)}
+                  onClick={() => teleportTo(player)}
+                >
+                  <CircleArrowRightIcon size='1.125rem' />
+                </div>
+              )}
+              {player.isRemote && localPlayer.outranks(player) && (
+                <div
+                  className='players-btn'
+                  onPointerEnter={() =>
+                    setHint(
+                      player.isMuted() ? 'Player is muted. Click to unmute.' : 'Player is not muted. Click to mute.'
+                    )
+                  }
+                  onPointerLeave={() => setHint(null)}
+                  onClick={() => toggleMute(player)}
+                >
+                  {player.isMuted() ? <MicOffIcon size='1.125rem' /> : <MicIcon size='1.125rem' />}
+                </div>
+              )}
+              {player.isRemote && localPlayer.outranks(player) && (
+                <div
+                  className='players-btn'
+                  onPointerEnter={() => setHint('Kick this player.')}
+                  onPointerLeave={() => setHint(null)}
+                  onClick={() => kick(player)}
+                >
+                  <UserXIcon size='1.125rem' />
+                </div>
+              )}
+            </div>
+          ))}
         </div>
       </div>
     </Pane>

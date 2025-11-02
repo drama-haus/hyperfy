@@ -45,9 +45,6 @@ export function geometryToPxMesh(world, geometry, convex) {
   let position = geometry.attributes.position
   const index = geometry.index
 
-  // const is16Bit = index?.array instanceof Uint16Array
-  // console.log('is16Bit', is16Bit)
-
   if (position.isInterleavedBufferAttribute) {
     // deinterleave!
     position = BufferGeometryUtils.deinterleaveAttribute(position)
@@ -82,10 +79,11 @@ export function geometryToPxMesh(world, geometry, convex) {
     // console.log('points.count', desc.points.count)
     // console.log('points.stride', desc.points.stride)
 
-    // convert Uint32Array to 16 bit due to a memory issue with Uint32Array
     let indices = index.array // Uint16Array or Uint32Array
-    const is16 = indices instanceof Uint16Array
-    if (!is16) {
+
+    // for some reason i'm seeing Uint8Arrays in some glbs, specifically the vipe rooms.
+    // so we just coerce these up to u16
+    if (indices instanceof Uint8Array) {
       indices = new Uint16Array(index.array.length)
       for (let i = 0; i < index.array.length; i++) {
         indices[i] = index.array[i]
@@ -118,9 +116,9 @@ export function geometryToPxMesh(world, geometry, convex) {
     } catch (err) {
       console.error('geometryToPxMesh failed...')
       console.error(err)
+    } finally {
+      PHYSX._webidl_free(indexPtr)
     }
-
-    PHYSX._webidl_free(indexPtr)
   }
 
   PHYSX._webidl_free(pointsPtr)

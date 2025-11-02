@@ -7,6 +7,8 @@ import { LerpVector3 } from '../extras/LerpVector3'
 import { LerpQuaternion } from '../extras/LerpQuaternion'
 import { Curve } from '../extras/Curve'
 import { prng } from '../extras/prng'
+import { BufferedLerpVector3 } from '../extras/BufferedLerpVector3'
+import { BufferedLerpQuaternion } from '../extras/BufferedLerpQuaternion'
 
 /**
  * Script System
@@ -46,8 +48,10 @@ export class Scripts extends System {
       Vector3: THREE.Vector3,
       Euler: THREE.Euler,
       Matrix4: THREE.Matrix4,
-      LerpVector3,
-      LerpQuaternion,
+      LerpVector3, // deprecated - use BufferedLerpVector3
+      LerpQuaternion, // deprecated - use BufferedLerpQuaternion
+      BufferedLerpVector3,
+      BufferedLerpQuaternion,
       // Material: Material,
       Curve,
       // Gradient: Gradient,

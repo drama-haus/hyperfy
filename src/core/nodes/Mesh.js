@@ -57,13 +57,12 @@ export class Mesh extends Node {
     this.linked = data.linked
     this.castShadow = data.castShadow
     this.receiveShadow = data.receiveShadow
-    this.visible = data.visible // DEPRECATED: use Node.active
+    this.visible = data.visible
   }
 
   mount() {
     this.needsRebuild = false
     if (!this._geometry) return
-    if (!this._visible) return // DEPRECATED: use Node.active
     let geometry
     if (this._type === 'box') {
       geometry = getBox(this._width, this._height, this._depth)
@@ -72,15 +71,26 @@ export class Mesh extends Node {
     } else if (this._type === 'geometry') {
       geometry = this._geometry
     }
-    this.handle = this.ctx.world.stage.insert({
-      geometry,
-      material: this._material,
-      linked: this._linked,
-      castShadow: this._castShadow,
-      receiveShadow: this._receiveShadow,
-      matrix: this.matrixWorld,
-      node: this,
-    })
+    if (this._visible) {
+      this.handle = this.ctx.world.stage.insert({
+        geometry,
+        material: this._material,
+        linked: this._linked,
+        castShadow: this._castShadow,
+        receiveShadow: this._receiveShadow,
+        matrix: this.matrixWorld,
+        node: this,
+      })
+    } else {
+      this.sItem = {
+        matrix: this.matrixWorld,
+        geometry,
+        material: this._material,
+        getEntity: () => this.ctx.entity,
+        node: this,
+      }
+      this.ctx.world.stage.octree.insert(this.sItem)
+    }
   }
 
   commit(didMove) {
@@ -90,12 +100,21 @@ export class Mesh extends Node {
       return
     }
     if (didMove) {
-      this.handle?.move(this.matrixWorld)
+      if (this.handle) {
+        this.handle.move(this.matrixWorld)
+      }
+      if (this.sItem) {
+        this.ctx.world.stage.octree.move(this.sItem)
+      }
     }
   }
 
   unmount() {
     this.handle?.destroy()
+    if (this.sItem) {
+      this.ctx.world.stage.octree.remove(this.sItem)
+      this.sItem = null
+    }
     this.handle = null
   }
 
@@ -111,7 +130,7 @@ export class Mesh extends Node {
     this._linked = source._linked
     this._castShadow = source._castShadow
     this._receiveShadow = source._receiveShadow
-    this._visible = source._visible // DEPRECATED: use Node.active
+    this._visible = source._visible
     return this
   }
 
@@ -287,12 +306,10 @@ export class Mesh extends Node {
   }
 
   get visible() {
-    // DEPRECATED: use Node.active
     return this._visible
   }
 
   set visible(value = defaults.visible) {
-    // DEPRECATED: use Node.active
     if (!isBoolean(value)) {
       throw new Error('[mesh] visible not a boolean')
     }
@@ -376,11 +393,9 @@ export class Mesh extends Node {
           self.receiveShadow = value
         },
         get visible() {
-          // DEPRECATED: use Node.active
           return self.visible
         },
         set visible(value) {
-          // DEPRECATED: use Node.active
           self.visible = value
         },
       }

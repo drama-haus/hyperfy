@@ -73,10 +73,10 @@ export class Stage extends System {
     }
   }
 
-  insertLinked({ geometry, material, castShadow, receiveShadow, node, matrix }) {
-    const id = `${geometry.uuid}/${material.uuid}/${castShadow}/${receiveShadow}`
+  insertLinked({ geometry, material, uberShader, castShadow, receiveShadow, node, matrix }) {
+    const id = `${geometry.uuid}/${material.uuid}/${uberShader}/${castShadow}/${receiveShadow}`
     if (!this.models.has(id)) {
-      const model = new Model(this, geometry, material, castShadow, receiveShadow)
+      const model = new Model(this, geometry, material, uberShader, castShadow, receiveShadow)
       this.models.set(id, model)
     }
     return this.models.get(id).create(node, matrix)
@@ -246,18 +246,32 @@ export class Stage extends System {
     return this.raycastHits
   }
 
+  raycast(origin, direction, layers = this.maskNone, min = 0, max = Infinity) {
+    if (!this.viewport) throw new Error('no viewport')
+    vec2.x = 0
+    vec2.y = 0
+    this.raycaster.set(origin, direction)
+    this.raycaster.layers = layers
+    this.raycaster.near = min
+    this.raycaster.far = max
+    this.raycastHits.length = 0
+    this.octree.raycast(this.raycaster, this.raycastHits)
+    return this.raycastHits
+  }
+
   destroy() {
     this.models.clear()
   }
 }
 
 class Model {
-  constructor(stage, geometry, material, castShadow, receiveShadow) {
+  constructor(stage, geometry, material, uberShader, castShadow, receiveShadow) {
     material = stage.createMaterial({ raw: material })
 
     this.stage = stage
-    this.geometry = geometry
+    this.geometry = geometry.clone() // important since uber shader needs unique buffer attributes
     this.material = material
+    this.uberShader = uberShader
     this.castShadow = castShadow
     this.receiveShadow = receiveShadow
 
@@ -281,8 +295,60 @@ class Model {
     this.iMesh.matrixWorldAutoUpdate = false
     this.iMesh.frustumCulled = false
     this.iMesh.getEntity = this.getEntity.bind(this)
-    this.items = [] // { matrix, node }
+    this.items = [] // { idx, node, matrix, color }
     this.dirty = true
+
+    // uber shader extends to support more per-instance properties like emissive, emissiveItensity and anything else in the future
+    if (this.uberShader) {
+      const prev = this.material.raw.onBeforeCompile
+      // see: https://claude.ai/chat/b73be3e5-bb52-4da2-a47e-fbbf4f3eb54b
+      this.material.raw.onBeforeCompile = function (shader) {
+        prev?.(shader)
+        shader.vertexShader = shader.vertexShader.replace(
+          `#include <color_pars_vertex>`,
+          `
+          #include <color_pars_vertex>
+          #ifdef USE_UBER_SHADER
+            attribute vec3 instanceEmissive;
+            attribute float instanceEmissiveIntensity;
+            varying vec3 vInstanceEmissive;
+          #endif
+          `
+        )
+        shader.vertexShader = shader.vertexShader.replace(
+          `#include <color_vertex>`,
+          `
+          #include <color_vertex>
+          #ifdef USE_UBER_SHADER
+            vInstanceEmissive = instanceEmissive * instanceEmissiveIntensity;
+          #endif
+          `
+        )
+        shader.fragmentShader = shader.fragmentShader.replace(
+          `#include <color_pars_fragment>`,
+          `
+          #include <color_pars_fragment>
+          #ifdef USE_UBER_SHADER
+            varying vec3 vInstanceEmissive;
+          #endif
+          `
+        )
+        shader.fragmentShader = shader.fragmentShader.replace(
+          `vec3 totalEmissiveRadiance = emissive;`,
+          `
+          vec3 totalEmissiveRadiance = emissive;
+          #ifdef USE_UBER_SHADER
+            totalEmissiveRadiance = vInstanceEmissive;
+          #endif
+          `
+        )
+        // console.log(this)
+        // console.log(shader.vertexShader)
+        // console.log(shader.fragmentShader)
+      }
+      this.material.raw.defines.USE_UBER_SHADER = ''
+      this.material.raw.needsUpdate = true
+    }
   }
 
   create(node, matrix) {
@@ -290,6 +356,9 @@ class Model {
       idx: this.items.length,
       node,
       matrix,
+      color: null,
+      emissive: null,
+      emissiveIntensity: null,
       // octree
     }
     this.items.push(item)
@@ -308,6 +377,23 @@ class Model {
       move: matrix => {
         this.move(item, matrix)
         this.stage.octree.move(sItem)
+      },
+      setColor: value => {
+        if (!item.color) item.color = new THREE.Color()
+        item.color.set(value)
+        this.iMesh.setColorAt(item.idx, item.color)
+        this.iMesh.instanceColor.needsUpdate = true
+      },
+      setEmissive: value => {
+        if (!item.emissive) item.emissive = new THREE.Color()
+        item.emissive.set(value)
+        this.iMesh.setEmissiveAt(item.idx, item.emissive)
+        this.iMesh.instanceEmissive.needsUpdate = true
+      },
+      setEmissiveIntensity: value => {
+        item.emissiveIntensity = value
+        this.iMesh.setEmissiveIntensityAt(item.idx, item.emissiveIntensity)
+        this.iMesh.instanceEmissiveIntensity.needsUpdate = true
       },
       destroy: () => {
         this.destroy(item)
@@ -336,6 +422,11 @@ class Model {
     } else {
       // there are other instances after this one in the buffer, swap it with the last one and pop it off the end
       this.iMesh.setMatrixAt(item.idx, last.matrix)
+      if (last.color) this.iMesh.setColorAt(item.idx, last.color)
+      if (last.emissive) this.iMesh.setEmissiveAt(item.idx, last.emissive)
+      if (last.emissiveIntensity || last.emissiveIntensity === 0) {
+        this.iMesh.setEmissiveIntensityAt(item.idx, last.emissiveIntensity)
+      }
       last.idx = item.idx
       this.items[item.idx] = last
       this.items.pop()
@@ -352,7 +443,13 @@ class Model {
       // console.log('increase', this.mesh.name, 'from', size, 'to', newSize)
       this.iMesh.resize(newSize)
       for (let i = size; i < count; i++) {
-        this.iMesh.setMatrixAt(i, this.items[i].matrix)
+        const item = this.items[i]
+        this.iMesh.setMatrixAt(i, item.matrix)
+        if (item.color) this.iMesh.setColorAt(i, item.color)
+        if (item.emissive) this.iMesh.setEmissiveAt(i, item.emissive)
+        if (item.emissiveIntensity || item.emissiveIntensity === 0) {
+          this.iMesh.setEmissiveIntensityAt(i, item.emissiveIntensity)
+        }
       }
     }
     this.iMesh.count = count
@@ -365,6 +462,15 @@ class Model {
       this.stage.scene.add(this.iMesh)
     }
     this.iMesh.instanceMatrix.needsUpdate = true
+    if (this.iMesh.instanceColor) {
+      this.iMesh.instanceColor.needsUpdate = true
+    }
+    if (this.iMesh.instanceEmissive) {
+      this.iMesh.instanceEmissive.needsUpdate = true
+    }
+    if (this.iMesh.instanceEmissiveIntensity) {
+      this.iMesh.instanceEmissiveIntensity.needsUpdate = true
+    }
     // this.iMesh.computeBoundingSphere()
     this.dirty = false
   }

@@ -235,6 +235,7 @@ export class Physics extends System {
               cb.fn = triggerHandle.onTriggerEnter
               cb.event.tag = otherHandle.tag
               cb.event.playerId = otherHandle.playerId
+              cb.event.isLocalPlayer = otherHandle.playerId === this.world.network.id
               this.triggerCallbacks.push(cb)
             }
             otherHandle.triggeredHandles.add(triggerHandle)
@@ -246,6 +247,7 @@ export class Physics extends System {
               cb.fn = triggerHandle.onTriggerLeave
               cb.event.tag = otherHandle.tag
               cb.event.playerId = otherHandle.playerId
+              cb.event.isLocalPlayer = otherHandle.playerId === this.world.network.id
               this.triggerCallbacks.push(cb)
             }
             otherHandle.triggeredHandles.delete(triggerHandle)
@@ -316,21 +318,7 @@ export class Physics extends System {
   }
 
   start() {
-    // ground
-    const size = 1000
-    const geometry = new PHYSX.PxBoxGeometry(size / 2, 1 / 2, size / 2)
-    const material = this.physics.createMaterial(0.6, 0.6, 0)
-    const flags = new PHYSX.PxShapeFlags(PHYSX.PxShapeFlagEnum.eSCENE_QUERY_SHAPE | PHYSX.PxShapeFlagEnum.eSIMULATION_SHAPE) // prettier-ignore
-    const shape = this.physics.createShape(geometry, material, true, flags)
-    const layer = Layers.environment
-    const filterData = new PHYSX.PxFilterData(layer.group, layer.mask, 0, 0) // prettier-ignore
-    shape.setQueryFilterData(filterData)
-    shape.setSimulationFilterData(filterData)
-    const transform = new PHYSX.PxTransform(PHYSX.PxIDENTITYEnum.PxIdentity)
-    transform.p.y = -0.5
-    const body = this.physics.createRigidStatic(transform)
-    body.attachShape(shape)
-    this.scene.addActor(body)
+    // ...
   }
 
   addActor(actor, handle) {
@@ -367,11 +355,15 @@ export class Physics extends System {
     return {
       move: matrix => {
         if (this.ignoreSetGlobalPose) {
-          const isDynamic = !actor.getRigidBodyFlags?.().isSet(PHYSX.PxRigidBodyFlagEnum.eKINEMATIC)
-          if (isDynamic) return
           return
         }
         matrix.toPxTransform(this.transform)
+        // const isKinematic = actor.getRigidBodyFlags?.().isSet(PHYSX.PxRigidBodyFlagEnum.eKINEMATIC)
+        // if (isKinematic) {
+        //   actor.setKinematicTarget(this.transform)
+        // } else {
+        //   actor.setGlobalPose(this.transform)
+        // }
         actor.setGlobalPose(this.transform)
       },
       snap: pose => {
@@ -454,6 +446,7 @@ export class Physics extends System {
   }
 
   preUpdate(alpha) {
+    this.world.stage.clean()
     for (const handle of this.active) {
       const lerp = handle.interpolation
       if (lerp.skip) {

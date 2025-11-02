@@ -17,11 +17,17 @@ const names = [
   'playerTeleport',
   'playerPush',
   'playerSessionAvatar',
+  'liveKitLevel',
+  'mute',
   'settingsModified',
   'spawnModified',
+  'modifyRank',
   'kick',
+  'ai',
   'ping',
   'pong',
+  'evmConnect',
+  'evmDisconnect',
 ]
 
 const byName = {}

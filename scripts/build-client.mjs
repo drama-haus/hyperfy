@@ -47,6 +47,6 @@ const buildDirectory = path.join(rootDir, 'build')
     await clientCtx.watch()
   } else {
     await clientCtx.rebuild()
-    process.exit(1)
+    process.exit(0)
   }
 }
