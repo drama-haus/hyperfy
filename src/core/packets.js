@@ -22,6 +22,7 @@ const names = [
   'settingsModified',
   'spawnModified',
   'modifyRank',
+  'scriptRenamed',
   'kick',
   'ai',
   'ping',

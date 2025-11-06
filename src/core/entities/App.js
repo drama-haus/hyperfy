@@ -172,6 +172,7 @@ export class App extends Entity {
     }
     // finished!
     this.building = false
+    this.world.events.emit('appBuilt', this.data.id)
   }
 
   unbuild() {

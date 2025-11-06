@@ -46,24 +46,33 @@ export class ClientNetwork extends System {
   }
 
   async upload(file) {
-    {
-      // first check if we even need to upload it
+    const isScriptFile = file.name.startsWith('script-') && file.name.endsWith('.js');
+
+    if (!isScriptFile) {
+      // For non-script files, use existing hash-based upload check for de-duplication
       const hash = await hashFile(file)
       const ext = file.name.split('.').pop().toLowerCase()
       const filename = `${hash}.${ext}`
-      const url = `${this.apiUrl}/upload-check?filename=${filename}`
-      const resp = await fetch(url)
+      const checkUrl = `${this.apiUrl}/upload-check?filename=${filename}`
+      const resp = await fetch(checkUrl)
       const data = await resp.json()
-      if (data.exists) return // console.log('already uploaded:', filename)
+      if (data.exists) {
+        // console.log('already uploaded (non-script):', filename)
+        return // Content already exists, no need to upload
+      }
     }
-    // then upload it
+    // For script files (isScriptFile is true), we skip the check and always upload to overwrite.
+    // For non-script files, this part is reached if data.exists was false.
+    
+    // Proceed to upload the file
     const form = new FormData()
-    form.append('file', file)
-    const url = `${this.apiUrl}/upload`
-    await fetch(url, {
+    form.append('file', file) // file.name is script-${blueprint.id}.js for scripts
+    const uploadUrl = `${this.apiUrl}/upload`
+    await fetch(uploadUrl, {
       method: 'POST',
       body: form,
     })
+    // console.log(isScriptFile ? 'Uploaded script:' : 'Uploaded new non-script file:', file.name)
   }
 
   enqueue(method, data) {
